@@ -11,10 +11,9 @@ test("landing page references the shared stylesheet", () => {
   assert.match(html, /\/assets\/styles\.css/);
 });
 
-test("receiver page exists and extracts transfer id client-side", () => {
+test("receiver page loads the receive controller module", () => {
   const html = readFileSync(join(webRoot, "app/receive.html"), "utf8");
-  assert.match(html, /window\.location\.pathname/);
-  assert.match(html, /transfer-id/);
+  assert.match(html, /\/js\/pages\/receive\.js/);
 });
 
 test("dev server rewrites /send/{id} to the receiver page", async () => {

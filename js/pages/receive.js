@@ -2,6 +2,7 @@ import { parseSendLink } from "../core/link_parser.js";
 import { resolveApiBase } from "../core/config.js";
 import { LynkApi, TransferNotFoundError } from "../core/api.js";
 import { decryptWithIvPrefix } from "../core/crypto.js";
+import { isP2pSupported, receiveViaP2p } from "../core/p2p_session.js";
 
 const els = {
   pasteSection: document.getElementById("paste-section"),
@@ -111,6 +112,61 @@ function saveBlob(bytes, fileName) {
 }
 
 async function startDownload() {
+  els.downloadButton.disabled = true;
+
+  if (isP2pSupported() && (await tryP2pReceive())) {
+    return;
+  }
+  await downloadViaCloud();
+}
+
+function tryP2pReceive() {
+  return new Promise((resolve) => {
+    let settled = false;
+    const settle = (value) => {
+      if (settled) return;
+      settled = true;
+      resolve(value);
+    };
+
+    setStatus("Waiting for the sender's direct connection…");
+    setProgress(0, "");
+
+    receiveViaP2p({
+      apiBase: resolveApiBase(),
+      transferId: state.transferId,
+      aesKey: state.aesKey,
+      onStatus: (event, info) => {
+        if (settled) {
+          if (event === "p2p-progress") {
+            const fraction = info.expected ? info.received / info.expected : 0;
+            setProgress(fraction * 0.9);
+          }
+          if (event === "p2p-failed") {
+            setStatus("Direct transfer failed. The link may have expired — request a fresh one.", "error");
+          }
+          return;
+        }
+        if (event === "p2p-header") {
+          els.fileName.textContent = info.name;
+          els.fileMeta.textContent = formatBytes(info.size);
+        }
+        if (typeof event === "string" && event.startsWith("p2p-failed")) {
+          settle(false);
+        }
+      },
+      onFileSaved: (plaintext, name) => {
+        saveBlob(plaintext, name);
+        setProgress(1, "Done");
+        setStatus("Saved! Check your browser downloads.", "success");
+        els.downloadButton.disabled = false;
+        settle(true);
+      },
+    });
+  });
+}
+
+async function downloadViaCloud() {
   els.downloadButton.disabled = true;
   setStatus("Downloading and decrypting…");
   setProgress(0);
