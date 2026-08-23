@@ -39,9 +39,14 @@
 
         <div id="pick-status" class="status-pill" style="margin-top: 16px;"></div>
 
-        <button id="send-button" class="btn btn-primary hidden" style="margin-top: 20px; width: 100%;">
-          🔐 Encrypt &amp; upload
-        </button>
+        <div style="display: flex; gap: 12px; margin-top: 20px; flex-wrap: wrap;">
+          <button id="send-p2p-button" class="btn btn-primary hidden" style="flex: 1;">
+            ⚡ Instant P2P Direct
+          </button>
+          <button id="send-cloud-button" class="btn btn-secondary hidden" style="flex: 1;">
+            ☁️ Cloud Session (10m)
+          </button>
+        </div>
       </section>
 
       <section id="progress-card" class="glass-card hidden" style="margin-top: 40px;">

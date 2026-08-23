@@ -1,6 +1,7 @@
-import { parseMessage } from "./signaling.js";
-import { parseText } from "./framer.js";
+import { parseMessage, encodeOffer } from "./signaling.js";
+import { parseText, encodeHeader, encodeEof, encodeDone } from "./framer.js";
 import { ChunkCollector } from "./chunk_collector.js";
+import { ChunkSender } from "./chunk_sender.js";
 import { decryptWithIvPrefix } from "./crypto.js";
 import { P2pCoordinator } from "./p2p_coordinator.js";
 
@@ -140,4 +141,131 @@ export function receiveViaP2p({ apiBase, transferId, aesKey, onStatus, onFileSav
   };
 
   return cleanup;
+}
+
+export function sendViaP2p({ apiBase, sessionId, files, onStatus }) {
+  return new Promise((resolve) => {
+    let ws;
+    let pc;
+    let channel;
+    let settled = false;
+    let sending = false;
+
+    const finish = (delivered) => {
+      if (settled) return;
+      settled = true;
+      try {
+        channel?.close();
+      } catch {}
+      try {
+        pc?.close();
+      } catch {}
+      try {
+        ws?.close();
+      } catch {}
+      resolve(delivered);
+    };
+
+    const fail = (reason) => {
+      onStatus?.(`p2p-failed:${reason}`);
+      finish(false);
+    };
+
+    const sendFrames = async () => {
+      if (sending) return;
+      sending = true;
+      try {
+        const sender = new ChunkSender({
+          bufferedAmount: () => channel.bufferedAmount,
+          send: async (chunk) => {
+            channel.send(chunk);
+            await new Promise((r) => setTimeout(r, 0));
+          },
+        });
+
+        for (const file of files) {
+          onStatus?.("p2p-sending", { name: file.name });
+          channel.send(encodeHeader({ name: file.name, size: file.blob.length }));
+          await sender.sendAll(file.blob);
+          channel.send(encodeEof({ name: file.name }));
+        }
+        channel.send(encodeDone());
+        onStatus?.("p2p-delivered");
+        finish(true);
+      } catch {
+        fail("channel");
+      }
+    };
+
+  const coordinator = new P2pCoordinator({
+      timeoutMs: 8000,
+      onP2PFailed: () => fail("timeout"),
+      actions: {
+        async createOffer() {
+          pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+          channel = pc.createDataChannel("fileTransfer");
+          channel.binaryType = "arraybuffer";
+          channel.onopen = () => {
+            coordinator.notifyConnected();
+            sendFrames();
+          };
+          channel.onerror = () => {
+            if (!settled) fail("channel");
+          };
+          channel.onclose = () => {
+            if (!settled && !sending) fail("closed");
+          };
+          pc.onicecandidate = (event) => {
+            if (!event.candidate || !ws || ws.readyState !== WebSocket.OPEN) return;
+            ws.send(
+              JSON.stringify({
+                type: "candidate",
+                candidate: {
+                  candidate: event.candidate.candidate,
+                  sdpMid: event.candidate.sdpMid ?? undefined,
+                  sdpMLineIndex: event.candidate.sdpMLineIndex ?? undefined,
+                },
+              }),
+            );
+          };
+
+          const offer = await pc.createOffer();
+          await pc.setLocalDescription(offer);
+          return encodeOffer(offer.sdp);
+        },
+        async handleRemoteDescription(message) {
+          if (message.type !== "answer" || !pc) return null;
+          await pc.setRemoteDescription({ type: "answer", sdp: message.sdp });
+          return null;
+        },
+        async addIceCandidate(candidate) {
+          try {
+            await pc?.addIceCandidate(candidate);
+          } catch {}
+        },
+        async sendSignaling(message) {
+          if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify(message));
+          }
+        },
+      },
+    });
+
+    try {
+      ws = new WebSocket(toWebSocketUrl(apiBase, sessionId));
+    } catch {
+      fail("websocket");
+      return;
+    }
+
+    ws.onmessage = (event) => {
+      coordinator.handleMessage(parseMessage(event.data));
+    };
+    ws.onerror = () => {
+      if (!settled) fail("websocket");
+    };
+    ws.onopen = () => {
+      coordinator.start({ role: "sender" });
+    };
+  });
 }

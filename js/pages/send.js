@@ -3,6 +3,7 @@ import { LynkApi, LimitExceededError } from "../core/api.js";
 import { encryptWithIvPrefix } from "../core/crypto.js";
 import { encryptedSize, validateSelection } from "../core/tiers.js";
 import { buildSendLink } from "../core/link_builder.js";
+import { isP2pSupported, sendViaP2p } from "../core/p2p_session.js";
 
 const els = {
   tierLabel: document.getElementById("tier-label"),
@@ -10,7 +11,8 @@ const els = {
   dropZone: document.getElementById("drop-zone"),
   fileList: document.getElementById("file-list"),
   pickStatus: document.getElementById("pick-status"),
-  sendButton: document.getElementById("send-button"),
+  p2pButton: document.getElementById("send-p2p-button"),
+  cloudButton: document.getElementById("send-cloud-button"),
   progressCard: document.getElementById("progress-card"),
   progressTitle: document.getElementById("progress-title"),
   progressFill: document.getElementById("progress-fill"),
@@ -80,46 +82,63 @@ function refreshPickState() {
   els.sendButton.classList.toggle("hidden", !validation.ok);
 }
 
-async function encryptAndUpload() {
+  els.p2pButton.classList.toggle("hidden", !validation.ok || !isP2pSupported());
+  els.cloudButton.classList.toggle("hidden", !validation.ok);
+}
+
+async function encryptAll(key) {
+  const encrypted = [];
+  for (let i = 0; i < selectedFiles.length; i++) {
+    const file = selectedFiles[i];
+    els.progressTitle.textContent = "Encrypting…";
+    setProgress((i / selectedFiles.length) * 0.2, file.name);
+    const plain = new Uint8Array(await file.arrayBuffer());
+    encrypted.push({
+      name: file.name,
+      blob: await encryptWithIvPrefix(plain, key),
+    });
+  }
+  return encrypted;
+}
+
+function generateSessionId() {
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  return Array.from(bytes)
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+async function uploadEncrypted(encrypted, key) {
   document.getElementById("pick-card").classList.add("hidden");
   els.progressCard.classList.remove("hidden");
   els.resultCard.classList.add("hidden");
 
+  const api = new LynkApi({ baseUrl: resolveApiBase() });
+  els.progressTitle.textContent = "Uploading…";
+  const created = await api.createTransfer(
+    encrypted.map((f) => ({ name: f.name, size: f.blob.length, type: "application/octet-stream" })),
+  );
+  currentTransferId = created.transferId;
+
+  for (let i = 0; i < created.files.length; i++) {
+    const target = created.files[i];
+    await fetch(target.uploadUrl, {
+      method: "PUT",
+      body: encrypted[i].blob,
+      headers: { "Content-Type": "application/octet-stream" },
+    });
+    await api.completeFile(created.transferId, target.fileId);
+    setProgress(0.2 + ((i + 1) / created.files.length) * 0.75, target.fileName);
+  }
+  setProgress(1, "Done");
+  showResult(created.transferId, key, created.expiresIn);
+}
+
+async function sendCloud() {
   try {
     const key = generateKey();
-    const api = new LynkApi({ baseUrl: resolveApiBase() });
-
-    const encrypted = [];
-    for (let i = 0; i < selectedFiles.length; i++) {
-      const file = selectedFiles[i];
-      els.progressTitle.textContent = "Encrypting…";
-      setProgress(i / selectedFiles.length * 0.2, file.name);
-      const plain = new Uint8Array(await file.arrayBuffer());
-      encrypted.push({
-        name: file.name,
-        blob: await encryptWithIvPrefix(plain, key),
-      });
-    }
-
-    els.progressTitle.textContent = "Uploading…";
-    const created = await api.createTransfer(
-      encrypted.map((f) => ({ name: f.name, size: f.blob.length, type: "application/octet-stream" })),
-    );
-    currentTransferId = created.transferId;
-
-    for (let i = 0; i < created.files.length; i++) {
-      const target = created.files[i];
-      await fetch(target.uploadUrl, {
-        method: "PUT",
-        body: encrypted[i].blob,
-        headers: { "Content-Type": "application/octet-stream" },
-      });
-      await api.completeFile(created.transferId, target.fileId);
-      setProgress(0.2 + ((i + 1) / created.files.length) * 0.75, target.fileName);
-    }
-    setProgress(1, "Done");
-
-    showResult(created.transferId, key, created.expiresIn);
+    const encrypted = await encryptAll(key);
+    await uploadEncrypted(encrypted, key);
   } catch (err) {
     els.progressTitle.textContent = "Something went wrong";
     els.progressLabel.textContent =
@@ -129,7 +148,41 @@ async function encryptAndUpload() {
   }
 }
 
-function showResult(transferId, key, expiresIn) {
+async function sendP2P() {
+  try {
+    const key = generateKey();
+    const encrypted = await encryptAll(key);
+
+    const sessionId = generateSessionId();
+    showResult(sessionId, key, null, "Waiting for the receiver to open the link…");
+    setResultStatus("Waiting for the receiver to open the link — keep this tab open.");
+
+    const delivered = await sendViaP2p({
+      apiBase: resolveApiBase(),
+      sessionId,
+      files: encrypted,
+      onStatus: (event) => {
+        if (event === "p2p-sending") setResultStatus("Direct transfer in progress…");
+        if (typeof event === "string" && event.startsWith("p2p-failed")) {
+          setResultStatus("Direct connection unavailable — switching to cloud session…");
+        }
+      },
+    });
+
+    if (delivered) {
+      clearInterval(window.__lynkCountdown);
+      setResultStatus("Delivered directly! The receiver has your file.", "success");
+      return;
+    }
+
+    await uploadEncrypted(encrypted, key);
+  } catch (err) {
+    els.progressTitle.textContent = "Something went wrong";
+    els.progressLabel.textContent = err?.message ?? "Transfer failed.";
+  }
+}
+
+function showResult(transferId, key, expiresIn, statusOverride) {
   els.progressCard.classList.add("hidden");
   els.resultCard.classList.remove("hidden");
 
@@ -145,6 +198,11 @@ function showResult(transferId, key, expiresIn) {
   els.qrHolder.innerHTML = qr.createSvgTag({ cellSize: 4, margin: 0 });
 
   els.linkBox.textContent = link;
+
+  if (statusOverride) {
+    setResultStatus(statusOverride);
+    return;
+  }
 
   let remaining = expiresIn ?? 600;
   const tick = () => {
@@ -183,7 +241,8 @@ els.dropZone.addEventListener("drop", (event) => {
   refreshPickState();
 });
 
-els.sendButton.addEventListener("click", () => encryptAndUpload());
+els.p2pButton.addEventListener("click", () => sendP2P());
+els.cloudButton.addEventListener("click", () => sendCloud());
 
 els.copyButton.addEventListener("click", async () => {
   try {
