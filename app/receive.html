@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="lynk-api-base" content="" />
+  <title>Receiving file — Lynk</title>
+  <link rel="stylesheet" href="/assets/styles.css" />
+</head>
+<body>
+  <div class="container">
+    <nav class="navbar">
+      <a class="brand" href="/">
+        <span class="brand-mark">⚡</span>
+        Lynk
+      </a>
+      <a class="btn btn-secondary" href="/app/send.html">Send a file</a>
+    </nav>
+
+    <main>
+      <section id="paste-section" class="glass-card" style="margin-top: 40px;">
+        <h2>Receive a file</h2>
+        <p class="text-muted" style="margin-top: 8px;">
+          Paste the Lynk link you received (or open it from a scanned QR code).
+        </p>
+        <div style="display: flex; gap: 10px; margin-top: 20px; flex-wrap: wrap;">
+          <input
+            id="paste-input"
+            type="url"
+            placeholder="https://lynkshare.app/send/…#key"
+            style="flex: 1; min-width: 240px; background: var(--surface-strong); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 14px 16px; color: var(--text); font-size: 0.95rem;"
+          />
+          <button id="paste-button" class="btn btn-primary">Receive</button>
+        </div>
+      </section>
+
+      <section id="transfer-card" class="glass-card hidden" style="margin-top: 40px;">
+        <h2 id="file-name">Transfer</h2>
+        <p id="file-meta" class="text-muted" style="margin-top: 8px;"></p>
+        <div class="progress-track" style="margin-top: 24px;">
+          <div id="progress-fill" class="progress-fill" style="width: 0%;"></div>
+        </div>
+        <p id="progress-label" class="text-muted" style="margin-top: 8px; font-size: 0.85rem;"></p>
+        <button id="download-button" class="btn btn-primary hidden" style="margin-top: 24px; width: 100%;">
+          📥 Download &amp; decrypt
+        </button>
+      </section>
+
+      <div id="status" class="status-pill" style="margin-top: 20px;"></div>
+    </main>
+  </div>
+
+  <script type="module" src="/js/pages/receive.js"></script>
+</body>
+</html>

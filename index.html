@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lynk — Private, instant file sharing</title>
+  <meta name="description" content="End-to-end encrypted file sharing. No accounts, no uploads to prying servers. Scan, send, done." />
+  <link rel="stylesheet" href="/assets/styles.css" />
+</head>
+<body>
+  <div class="container">
+    <nav class="navbar">
+      <a class="brand" href="/">
+        <span class="brand-mark">⚡</span>
+        Lynk
+      </a>
+      <a class="btn btn-secondary" href="/app/send.html">Send a file</a>
+    </nav>
+
+    <main>
+      <section class="hero">
+        <span class="status-pill">🔒 End-to-end encrypted · zero registration</span>
+        <h1>Files travel <span class="gradient-text">directly</span>.<br />Nobody reads them in between.</h1>
+        <p>
+          Pick a file, show a QR code, done. AES-256 encryption happens on your
+          device — the server only ever moves ciphertext it cannot read.
+        </p>
+        <div style="display: flex; gap: 12px; justify-content: center; margin-top: 32px; flex-wrap: wrap;">
+          <a class="btn btn-primary" href="/app/send.html">⚡ Send a file</a>
+          <a class="btn btn-secondary" href="/app/receive.html">📥 Receive a file</a>
+        </div>
+      </section>
+
+      <section class="feature-grid">
+        <div class="feature-card glass-card">
+          <h3>🔐 Client-side encryption</h3>
+          <p>AES-256 keys live only in the link you share — servers never see them.</p>
+        </div>
+        <div class="feature-card glass-card">
+          <h3>⚡ Direct P2P transfer</h3>
+          <p>Device-to-device over WebRTC when possible — maximum speed, no middleman.</p>
+        </div>
+        <div class="feature-card glass-card">
+          <h3>☁️ Cloud fallback</h3>
+          <p>P2P blocked? Encrypted copies relay via storage that never holds a key.</p>
+        </div>
+        <div class="feature-card glass-card">
+          <h3>🚫 No accounts</h3>
+          <p>No sign-ups, no emails, no tracking. Open a page and start sharing.</p>
+        </div>
+      </section>
+    </main>
+  </div>
+</body>
+</html>
