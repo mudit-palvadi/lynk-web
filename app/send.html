@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="lynk-api-base" content="" />
   <title>Send a file — Lynk</title>
   <link rel="stylesheet" href="/assets/styles.css" />
 </head>
@@ -13,20 +14,64 @@
         <span class="brand-mark">⚡</span>
         Lynk
       </a>
+      <a class="btn btn-secondary" href="/app/receive.html">Receive</a>
     </nav>
 
     <main>
-      <!-- SP5 fills this in: file picker, encrypt, upload, QR + copy-link panel -->
-      <section class="glass-card" style="margin-top: 40px; text-align: center;">
-        <h2>Send flow</h2>
-        <p class="text-muted" style="margin-top: 12px;">
-          Sender implementation lands in SP5.
+      <section id="pick-card" class="glass-card" style="margin-top: 40px;">
+        <h2>Send files</h2>
+        <p class="text-muted" style="margin-top: 8px;">
+          Files are encrypted on this device before upload. Free tier:
+          <span id="tier-label"></span> total.
         </p>
-        <a class="btn btn-secondary" href="/app/receive.html" style="margin-top: 20px;">
-          Open receiver page
-        </a>
+
+        <label
+          id="drop-zone"
+          for="file-input"
+          style="display: block; margin-top: 20px; padding: 36px; border: 2px dashed var(--border); border-radius: var(--radius-md); text-align: center; cursor: pointer; color: var(--text-muted);"
+        >
+          📁 Tap to choose files (or drop them here)
+        </label>
+        <input id="file-input" type="file" multiple hidden />
+
+        <ul id="file-list" style="list-style: none; margin-top: 16px;"></ul>
+
+        <div id="pick-status" class="status-pill" style="margin-top: 16px;"></div>
+
+        <button id="send-button" class="btn btn-primary hidden" style="margin-top: 20px; width: 100%;">
+          🔐 Encrypt &amp; upload
+        </button>
+      </section>
+
+      <section id="progress-card" class="glass-card hidden" style="margin-top: 40px;">
+        <h2 id="progress-title">Encrypting…</h2>
+        <div class="progress-track" style="margin-top: 24px;">
+          <div id="progress-fill" class="progress-fill" style="width: 0%;"></div>
+        </div>
+        <p id="progress-label" class="text-muted" style="margin-top: 8px; font-size: 0.85rem;"></p>
+      </section>
+
+      <section id="result-card" class="glass-card hidden" style="margin-top: 40px;">
+        <h2>Scan or share</h2>
+        <p class="text-muted" style="margin-top: 8px;">
+          The recipient scans the QR — or opens the link on any device.
+          The key lives only in this link; keep it private.
+        </p>
+        <div id="qr-holder" style="margin: 24px auto 0; width: fit-content; background: #fff; border-radius: var(--radius-md); padding: 12px;"></div>
+        <div
+          id="link-box"
+          style="margin-top: 20px; background: var(--surface-strong); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 12px 14px; font-size: 0.85rem; word-break: break-all; user-select: all;"
+        ></div>
+        <div style="display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap;">
+          <button id="copy-button" class="btn btn-primary" style="flex: 1;">📋 Copy link</button>
+          <button id="extend-button" class="btn btn-secondary" style="flex: 1;">⏱️ Extend to 30 min</button>
+        </div>
+        <div id="result-status" class="status-pill" style="margin-top: 16px;"></div>
       </section>
     </main>
   </div>
+
+  <script src="/js/lib/qrcode.js"></script>
+  <script type="module" src="/js/pages/send.js"></script>
 </body>
 </html>

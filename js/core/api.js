@@ -20,6 +20,13 @@ export class ApiError extends Error {
   }
 }
 
+export class LimitExceededError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "LimitExceededError";
+  }
+}
+
 async function parseJson(response) {
   try {
     return await response.json();
@@ -36,6 +43,46 @@ export class LynkApi {
 
   async getTransferMetadata(transferId) {
     return this.request(`${this.baseUrl}/api/v1/transfers/${encodeURIComponent(transferId)}`);
+  }
+
+  async createTransfer(files) {
+    const json = await this.request(`${this.baseUrl}/api/v1/transfers`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        files: files.map((f) => ({
+          file_name: f.name,
+          file_size: f.size,
+          content_type: f.type || "application/octet-stream",
+        })),
+      }),
+    });
+    return {
+      transferId: json.transfer_id,
+      status: json.status,
+      expiresIn: json.expires_in,
+      files: (json.files ?? []).map((f) => ({
+        fileId: f.file_id,
+        fileName: f.file_name,
+        fileSize: f.file_size,
+        uploadUrl: f.upload_url,
+      })),
+    };
+  }
+
+  async completeFile(transferId, fileId) {
+    return this.request(
+      `${this.baseUrl}/api/v1/transfers/${encodeURIComponent(transferId)}/files/${encodeURIComponent(fileId)}/complete`,
+      { method: "POST" },
+    );
+  }
+
+  async extendTransfer(transferId) {
+    const json = await this.request(
+      `${this.baseUrl}/api/v1/transfers/${encodeURIComponent(transferId)}/extend`,
+      { method: "POST" },
+    );
+    return { transferId: json.transfer_id, status: json.status, expiresIn: json.expires_in };
   }
 
   async getDownloadUrls(transferId) {
@@ -64,6 +111,7 @@ export class LynkApi {
     const json = await parseJson(response);
     const detail = typeof json?.detail === "string" ? json.detail : `request failed (${response.status})`;
     if (response.status === 404) throw new TransferNotFoundError(detail);
+    if (response.status === 413) throw new LimitExceededError(detail);
     throw new ApiError(response.status, detail);
   }
 }
