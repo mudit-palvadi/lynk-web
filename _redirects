@@ -1,0 +1,2 @@
+/send/*    /app/receive.html    200
+/receive/*    /app/receive.html    200
