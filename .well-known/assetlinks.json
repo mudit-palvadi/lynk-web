@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "app.xynix.lynk",
+      "sha256_cert_fingerprints": [
+        "74:25:40:24:ED:53:EF:1F:A7:8F:00:B7:D1:72:7B:6A:CC:4B:12:B9:20:8D:EB:8D:48:11:58:6C:6C:C8:F0:94"
+      ]
+    }
+  }
+]

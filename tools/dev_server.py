@@ -24,6 +24,12 @@ class LynkRequestHandler(http.server.SimpleHTTPRequestHandler):
         super().do_GET()
 
     def guess_type(self, path):
+        if path.endswith((".well-known/assetlinks.json", ".well-known/apple-app-site-association")) or path.endswith(
+            ("assetlinks.json", "apple-app-site-association")
+        ):
+            return "application/json"
+        if path.endswith(".webmanifest"):
+            return "application/manifest+json"
         guessed = super().guess_type(path)
         if path.endswith(".js"):
             return "text/javascript"
