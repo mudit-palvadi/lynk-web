@@ -3,7 +3,10 @@ import { LynkApi, LimitExceededError } from "../core/api.js";
 import { encryptWithIvPrefix } from "../core/crypto.js";
 import { encryptedSize, validateSelection } from "../core/tiers.js";
 import { buildSendLink } from "../core/link_builder.js";
+import { parseReceiverQrLink } from "../core/link_parser.js";
 import { isP2pSupported, sendViaP2p } from "../core/p2p_session.js";
+import { scanReceiverQr } from "../core/qr_scanner.js";
+import { wrapKey } from "../core/key_wrap.js";
 
 const els = {
   tierLabel: document.getElementById("tier-label"),
@@ -28,6 +31,8 @@ const els = {
 const MODE = "cloud";
 let selectedFiles = [];
 let currentTransferId = null;
+let pendingPair = null;
+let cancelScan = null;
 
 function formatBytes(bytes) {
   if (bytes < 1024) return `${bytes} B`;
@@ -131,7 +136,28 @@ async function uploadEncrypted(encrypted, key) {
     setProgress(0.2 + ((i + 1) / created.files.length) * 0.75, target.fileName);
   }
   setProgress(1, "Done");
+
+  if (pendingPair) {
+    await deliverToPairedPhone(encrypted, key);
+  }
   showResult(created.transferId, key, created.expiresIn);
+}
+
+async function deliverToPairedPhone(encrypted, key) {
+  try {
+    const api = new LynkApi({ baseUrl: resolveApiBase() });
+    const wrappedKey = await wrapKey({
+      aesKey: key,
+      receiverPublicKeyB64: pendingPair.publicKeyB64,
+      sessionId: pendingPair.sessionId,
+    });
+    await api.attachTransfer(pendingPair.sessionId, currentTransferId, wrappedKey);
+    pendingPair = null;
+    document.getElementById("pair-state").textContent = "";
+  } catch {
+    document.getElementById("pair-state").textContent =
+      "Pairing failed — use the link instead.";
+  }
 }
 
 async function sendCloud() {
@@ -243,6 +269,46 @@ els.dropZone.addEventListener("drop", (event) => {
 
 els.p2pButton.addEventListener("click", () => sendP2P());
 els.cloudButton.addEventListener("click", () => sendCloud());
+
+document.getElementById("scan-pair-button").addEventListener("click", async () => {
+  if (!selectedFiles.length) return;
+  const scannerCard = document.getElementById("scanner-card");
+  const video = document.getElementById("camera-preview");
+  const scanStatus = document.getElementById("scan-status");
+  scannerCard.classList.remove("hidden");
+  scanStatus.textContent = "Starting camera…";
+
+  try {
+    const link = await scanReceiverQr(video, {
+      onCancel: (cleanup) => {
+        cancelScan = cleanup;
+      },
+    });
+    scannerCard.classList.add("hidden");
+    cancelScan = null;
+
+    const parsed = parseReceiverQrLink(new URL(link));
+    if (!parsed.sessionId || !parsed.publicKeyB64) {
+      scanStatus.textContent = "";
+      document.getElementById("pair-state").textContent =
+        "That QR was not a Lynk receiver code.";
+      return;
+    }
+    pendingPair = parsed;
+    document.getElementById("pair-state").textContent =
+      "✓ Paired with your phone — send via Cloud Session.";
+  } catch (err) {
+    scannerCard.classList.add("hidden");
+    cancelScan = null;
+    scanStatus.textContent = `Camera unavailable: ${err?.message ?? "permission denied"}`;
+  }
+});
+
+document.getElementById("scan-cancel-button").addEventListener("click", () => {
+  cancelScan?.();
+  cancelScan = null;
+  document.getElementById("scanner-card").classList.add("hidden");
+});
 
 els.copyButton.addEventListener("click", async () => {
   try {

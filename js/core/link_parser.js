@@ -8,3 +8,16 @@ export function parseSendLink(url) {
 
   return { transferId, aesKey };
 }
+
+export function parseReceiverQrLink(url) {
+  const segments = url.pathname.split("/").filter(Boolean);
+  const receiveIndex = segments.indexOf("receive");
+  const sessionId = receiveIndex >= 0 && receiveIndex + 1 < segments.length
+    ? decodeURIComponent(segments[receiveIndex + 1])
+    : "";
+
+  const fragment = url.hash.startsWith("#") ? url.hash.slice(1) : url.hash;
+  const publicKeyB64 = fragment.startsWith("pk=") ? fragment.slice(3) : "";
+
+  return { sessionId, publicKeyB64 };
+}

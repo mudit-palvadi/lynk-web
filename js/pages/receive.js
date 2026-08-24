@@ -1,7 +1,11 @@
-import { parseSendLink } from "../core/link_parser.js";
+import { parseSendLink, parseReceiverQrLink } from "../core/link_parser.js";
 import { resolveApiBase } from "../core/config.js";
 import { LynkApi, TransferNotFoundError } from "../core/api.js";
 import { decryptWithIvPrefix } from "../core/crypto.js";
+import {
+  generateReceiverKeyPair,
+  unwrapKey,
+} from "../core/key_wrap.js";
 import { isP2pSupported, receiveViaP2p } from "../core/p2p_session.js";
 
 const els = {
@@ -248,4 +252,83 @@ if (direct.transferId && direct.aesKey) {
   loadTransfer();
 } else if (direct.transferId && !direct.aesKey) {
   setStatus("This link is missing its decryption key (#fragment). Use the original QR link.", "error");
+}
+
+async function startPairing() {
+  const pairButton = document.getElementById("pair-button");
+  const qrHolder = document.getElementById("pair-qr-holder");
+  pairButton.disabled = true;
+  setStatus("Creating a pairing session…");
+
+  try {
+    if (typeof crypto.subtle === "undefined") throw new Error("no webcrypto");
+    await crypto.subtle.generateKey({ name: "X25519" }, true, ["deriveBits"]);
+
+    const api = new LynkApi({ baseUrl: resolveApiBase() });
+    const session = await api.createReceiverSession();
+    const receiver = await generateReceiverKeyPair();
+
+    const base =
+      window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
+        ? window.location.origin
+        : "https://lynkshare.app";
+    const qrLink = `${base}/receive/${session.sessionId}#pk=${receiver.publicKeyB64}`;
+
+    const qr = window.qrcode(0, "M");
+    qr.addData(qrLink);
+    qr.make();
+    qrHolder.innerHTML = qr.createSvgTag({ cellSize: 4, margin: 0 });
+    qrHolder.classList.remove("hidden");
+    setStatus("Scan this QR from the Lynk app on your phone.");
+
+    state.pairing = {
+      sessionId: session.sessionId,
+      privateKeySeed: receiver.privateKeySeed,
+    };
+    pollAttached(api, pairButton);
+  } catch {
+    setStatus("Pairing is not supported in this browser — use a paste link instead.", "error");
+    pairButton.disabled = false;
+  }
+}
+
+function pollAttached(api, pairButton) {
+  let elapsed = 0;
+  clearInterval(window.__lynkPoll);
+  window.__lynkPoll = setInterval(async () => {
+    elapsed += 2;
+    if (!state.pairing) {
+      clearInterval(window.__lynkPoll);
+      return;
+    }
+    if (elapsed > 600) {
+      clearInterval(window.__lynkPoll);
+      setStatus("Pairing window expired — start again.", "error");
+      pairButton.disabled = false;
+      return;
+    }
+    try {
+      const session = await api.getReceiverSession(state.pairing.sessionId);
+      if (session.status === "attached" && session.wrappedKey && session.transferId) {
+        clearInterval(window.__lynkPoll);
+        const aesKey = await unwrapKey({
+          wrappedBase64: session.wrappedKey,
+          privateKeySeed: state.pairing.privateKeySeed,
+          sessionId: state.pairing.sessionId,
+        });
+        state.transferId = session.transferId;
+        state.aesKey = aesKey;
+        state.pairing = null;
+        document.getElementById("paste-section").classList.add("hidden");
+        loadTransfer();
+      }
+    } catch {}
+  }, 2000);
+}
+
+document.getElementById("pair-button").addEventListener("click", () => startPairing());
+
+const incomingReceiverQr = parseReceiverQrLink(new URL(window.location.href));
+if (incomingReceiverQr.publicKeyB64) {
+  document.getElementById("paste-section").classList.add("hidden");
 }

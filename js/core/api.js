@@ -85,6 +85,37 @@ export class LynkApi {
     return { transferId: json.transfer_id, status: json.status, expiresIn: json.expires_in };
   }
 
+  async createReceiverSession() {
+    const json = await this.request(`${this.baseUrl}/api/v1/receiver-sessions`, {
+      method: "POST",
+    });
+    return { sessionId: json.session_id, status: json.status, expiresIn: json.expires_in };
+  }
+
+  async getReceiverSession(sessionId) {
+    const json = await this.request(
+      `${this.baseUrl}/api/v1/receiver-sessions/${encodeURIComponent(sessionId)}`,
+    );
+    return {
+      sessionId: json.session_id,
+      status: json.status,
+      transferId: json.transfer_id ?? null,
+      wrappedKey: json.wrapped_key ?? null,
+      expiresIn: json.expires_in ?? 0,
+    };
+  }
+
+  async attachTransfer(sessionId, transferId, wrappedKey) {
+    return this.request(
+      `${this.baseUrl}/api/v1/receiver-sessions/${encodeURIComponent(sessionId)}/attach-transfer`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ transfer_id: transferId, wrapped_key: wrappedKey }),
+      },
+    );
+  }
+
   async getDownloadUrls(transferId) {
     const json = await this.request(
       `${this.baseUrl}/api/v1/transfers/${encodeURIComponent(transferId)}/downloads`,
