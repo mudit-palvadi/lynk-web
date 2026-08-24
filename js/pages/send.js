@@ -7,6 +7,7 @@ import { parseReceiverQrLink } from "../core/link_parser.js";
 import { isP2pSupported, sendViaP2p } from "../core/p2p_session.js";
 import { scanReceiverQr } from "../core/qr_scanner.js";
 import { wrapKey } from "../core/key_wrap.js";
+import { HistoryStore } from "../core/history_store.js";
 
 const els = {
   tierLabel: document.getElementById("tier-label"),
@@ -29,10 +30,22 @@ const els = {
 };
 
 const MODE = "cloud";
+const historyStore = new HistoryStore();
 let selectedFiles = [];
 let currentTransferId = null;
 let pendingPair = null;
 let cancelScan = null;
+
+function recordSend(status) {
+  historyStore.add({
+    id: currentTransferId ?? "p2p",
+    type: "sent",
+    fileNames: selectedFiles.map((f) => f.name),
+    totalSize: selectedFiles.reduce((sum, f) => sum + f.size, 0),
+    timestamp: Date.now(),
+    status,
+  });
+}
 
 function formatBytes(bytes) {
   if (bytes < 1024) return `${bytes} B`;
@@ -140,6 +153,7 @@ async function uploadEncrypted(encrypted, key) {
   if (pendingPair) {
     await deliverToPairedPhone(encrypted, key);
   }
+  recordSend("completed (cloud)");
   showResult(created.transferId, key, created.expiresIn);
 }
 
@@ -197,6 +211,7 @@ async function sendP2P() {
 
     if (delivered) {
       clearInterval(window.__lynkCountdown);
+      recordSend("completed (p2p)");
       setResultStatus("Delivered directly! The receiver has your file.", "success");
       return;
     }

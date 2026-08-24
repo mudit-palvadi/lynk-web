@@ -7,6 +7,20 @@ import {
   unwrapKey,
 } from "../core/key_wrap.js";
 import { isP2pSupported, receiveViaP2p } from "../core/p2p_session.js";
+import { HistoryStore } from "../core/history_store.js";
+
+const historyStore = new HistoryStore();
+
+function recordReceive(transferId, fileNames, totalSize, status) {
+  historyStore.add({
+    id: transferId,
+    type: "received",
+    fileNames,
+    totalSize,
+    timestamp: Date.now(),
+    status,
+  });
+}
 
 const els = {
   pasteSection: document.getElementById("paste-section"),
@@ -161,6 +175,7 @@ function tryP2pReceive() {
       },
       onFileSaved: (plaintext, name) => {
         saveBlob(plaintext, name);
+        recordReceive(state.transferId, [name], plaintext.length, "completed (p2p)");
         setProgress(1, "Done");
         setStatus("Saved! Check your browser downloads.", "success");
         els.downloadButton.disabled = false;
@@ -197,6 +212,12 @@ async function downloadViaCloud() {
     }
 
     setProgress(1, "Done");
+    recordReceive(
+      state.transferId,
+      downloads.map((f) => f.fileName),
+      downloads.reduce((sum, f) => sum + (state.metadata?.files?.find((x) => x.fileId === f.fileId)?.fileSize ?? 0), 0),
+      "completed (cloud)",
+    );
     setStatus("Saved! Check your browser downloads.", "success");
   } catch {
     setStatus("Download failed. The link may have expired — request a fresh one.", "error");

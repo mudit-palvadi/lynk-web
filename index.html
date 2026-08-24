@@ -51,10 +51,32 @@
         </div>
       </section>
 
+      <section class="glass-card" style="margin-top: 24px;">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <h3 style="font-size: 1.05rem;">Recent activity</h3>
+          <button id="history-clear" class="btn btn-secondary" style="padding: 6px 14px; font-size: 0.8rem;">
+            Clear
+          </button>
+        </div>
+        <div id="history-list"></div>
+      </section>
+
       <div data-ad-banner="" style="margin: 24px 0;"></div>
     </main>
   </div>
 
   <script type="module" src="/js/mount_ads.js"></script>
+  <script type="module">
+    import { renderHistory } from "/js/pages/history_view.js";
+    import { HistoryStore } from "/js/core/history_store.js";
+
+    const container = document.getElementById("history-list");
+    const store = new HistoryStore();
+    renderHistory(container, store);
+    document.getElementById("history-clear").addEventListener("click", () => {
+      store.clear();
+      renderHistory(container, store);
+    });
+  </script>
 </body>
 </html>
