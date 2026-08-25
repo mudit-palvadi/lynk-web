@@ -307,8 +307,14 @@ async function startPairing() {
       privateKeySeed: receiver.privateKeySeed,
     };
     pollAttached(api, pairButton);
-  } catch {
-    setStatus("Pairing is not supported in this browser — use a paste link instead.", "error");
+  } catch (err) {
+    if (typeof window.qrcode !== "function") {
+      setStatus("QR generator failed to load — please refresh the page.", "error");
+    } else if (typeof crypto.subtle === "undefined" || (typeof window !== "undefined" && !window.isSecureContext)) {
+      setStatus("Pairing requires a secure HTTPS connection — paste the link instead.", "error");
+    } else {
+      setStatus(`Pairing unavailable (${err?.message ?? "unsupported"}) — paste the link instead.`, "error");
+    }
     pairButton.disabled = false;
   }
 }

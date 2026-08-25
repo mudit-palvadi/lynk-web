@@ -53,6 +53,11 @@ function formatBytes(bytes) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function getFileBadge(name) {
+  const ext = (name.split(".").pop() || "").toUpperCase();
+  return ext.length > 0 && ext.length <= 4 ? ext : "FILE";
+}
+
 function setProgress(fraction, label) {
   const pct = Math.round(Math.min(Math.max(fraction, 0), 1) * 100);
   els.progressFill.style.width = `${pct}%`;
@@ -66,20 +71,44 @@ function generateKey() {
     .join("");
 }
 
+function removeFile(index) {
+  selectedFiles.splice(index, 1);
+  refreshPickState();
+}
+
 function renderFileList() {
   els.fileList.innerHTML = "";
-  let totalPlain = 0;
-  for (const file of selectedFiles) {
-    totalPlain += encryptedSize(file.size);
+  let totalEncrypted = 0;
+
+  selectedFiles.forEach((file, index) => {
+    const encSize = encryptedSize(file.size);
+    totalEncrypted += encSize;
+
     const item = document.createElement("li");
-    item.style.cssText =
-      "display:flex; justify-content:space-between; gap:12px; padding:8px 0; border-bottom:1px solid var(--border); font-size:0.92rem;";
-    item.innerHTML = `<span>📄 ${file.name}</span><span class="text-muted">${formatBytes(
-      encryptedSize(file.size),
-    )} enc</span>`;
+    item.className = "file-item";
+
+    const badge = getFileBadge(file.name);
+    item.innerHTML = `
+      <div class="file-info">
+        <span class="file-type-badge">${badge}</span>
+        <span class="file-name" title="${file.name}">${file.name}</span>
+      </div>
+      <div class="file-meta-group">
+        <span class="file-size-tag">${formatBytes(file.size)}</span>
+        <button class="file-remove-btn" title="Remove file" data-index="${index}" aria-label="Remove ${file.name}">Remove</button>
+      </div>
+    `;
+
+    const removeBtn = item.querySelector(".file-remove-btn");
+    removeBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      removeFile(index);
+    });
+
     els.fileList.appendChild(item);
-  }
-  return totalPlain;
+  });
+
+  return totalEncrypted;
 }
 
 function refreshPickState() {
@@ -89,27 +118,27 @@ function refreshPickState() {
   if (selectedFiles.length === 0) {
     els.pickStatus.textContent = "Free tier allows up to 20 MB total.";
     els.pickStatus.className = "status-pill";
+    els.p2pButton.classList.add("hidden");
+    els.cloudButton.classList.add("hidden");
   } else if (!validation.ok) {
     els.pickStatus.textContent = validation.reason;
     els.pickStatus.className = "status-pill status-error";
+    els.p2pButton.classList.add("hidden");
+    els.cloudButton.classList.add("hidden");
   } else {
-    els.pickStatus.textContent = `${formatBytes(totalEncrypted)} ready to send.`;
+    els.pickStatus.textContent = `${selectedFiles.length} file${selectedFiles.length > 1 ? "s" : ""} (${formatBytes(totalEncrypted)} encrypted) selected.`;
     els.pickStatus.className = "status-pill status-success";
+    els.p2pButton.classList.toggle("hidden", !isP2pSupported());
+    els.cloudButton.classList.remove("hidden");
   }
-
-  els.sendButton.classList.toggle("hidden", !validation.ok);
-}
-
-  els.p2pButton.classList.toggle("hidden", !validation.ok || !isP2pSupported());
-  els.cloudButton.classList.toggle("hidden", !validation.ok);
 }
 
 async function encryptAll(key) {
   const encrypted = [];
   for (let i = 0; i < selectedFiles.length; i++) {
     const file = selectedFiles[i];
-    els.progressTitle.textContent = "Encrypting…";
-    setProgress((i / selectedFiles.length) * 0.2, file.name);
+    els.progressTitle.textContent = "Encrypting files...";
+    setProgress((i / selectedFiles.length) * 0.25, `Encrypting ${file.name}...`);
     const plain = new Uint8Array(await file.arrayBuffer());
     encrypted.push({
       name: file.name,
@@ -132,7 +161,7 @@ async function uploadEncrypted(encrypted, key) {
   els.resultCard.classList.add("hidden");
 
   const api = new LynkApi({ baseUrl: resolveApiBase() });
-  els.progressTitle.textContent = "Uploading…";
+  els.progressTitle.textContent = "Uploading to Cloud Storage...";
   const created = await api.createTransfer(
     encrypted.map((f) => ({ name: f.name, size: f.blob.length, type: "application/octet-stream" })),
   );
@@ -140,15 +169,15 @@ async function uploadEncrypted(encrypted, key) {
 
   for (let i = 0; i < created.files.length; i++) {
     const target = created.files[i];
+    setProgress(0.25 + (i / created.files.length) * 0.7, `Uploading ${target.fileName}...`);
     await fetch(target.uploadUrl, {
       method: "PUT",
       body: encrypted[i].blob,
       headers: { "Content-Type": "application/octet-stream" },
     });
     await api.completeFile(created.transferId, target.fileId);
-    setProgress(0.2 + ((i + 1) / created.files.length) * 0.75, target.fileName);
   }
-  setProgress(1, "Done");
+  setProgress(1, "Upload complete");
 
   if (pendingPair) {
     await deliverToPairedPhone(encrypted, key);
@@ -194,17 +223,17 @@ async function sendP2P() {
     const encrypted = await encryptAll(key);
 
     const sessionId = generateSessionId();
-    showResult(sessionId, key, null, "Waiting for the receiver to open the link…");
-    setResultStatus("Waiting for the receiver to open the link — keep this tab open.");
+    showResult(sessionId, key, null, "Waiting for receiver to connect...");
+    setResultStatus("Waiting for receiver — keep this tab open.", "warn");
 
     const delivered = await sendViaP2p({
       apiBase: resolveApiBase(),
       sessionId,
       files: encrypted,
       onStatus: (event) => {
-        if (event === "p2p-sending") setResultStatus("Direct transfer in progress…");
+        if (event === "p2p-sending") setResultStatus("Direct P2P streaming in progress...", "success");
         if (typeof event === "string" && event.startsWith("p2p-failed")) {
-          setResultStatus("Direct connection unavailable — switching to cloud session…");
+          setResultStatus("Direct connection failed — switching to Cloud Session...", "warn");
         }
       },
     });
@@ -212,7 +241,7 @@ async function sendP2P() {
     if (delivered) {
       clearInterval(window.__lynkCountdown);
       recordSend("completed (p2p)");
-      setResultStatus("Delivered directly! The receiver has your file.", "success");
+      setResultStatus("Delivered directly. Receiver received all files.", "success");
       return;
     }
 
@@ -224,6 +253,7 @@ async function sendP2P() {
 }
 
 function showResult(transferId, key, expiresIn, statusOverride) {
+  document.getElementById("pick-card").classList.add("hidden");
   els.progressCard.classList.add("hidden");
   els.resultCard.classList.remove("hidden");
 
@@ -233,10 +263,14 @@ function showResult(transferId, key, expiresIn, statusOverride) {
       : "https://lynkshare.app";
   const link = buildSendLink(base, transferId, key);
 
-  const qr = window.qrcode(0, "M");
-  qr.addData(link);
-  qr.make();
-  els.qrHolder.innerHTML = qr.createSvgTag({ cellSize: 4, margin: 0 });
+  if (typeof window.qrcode === "function") {
+    const qr = window.qrcode(0, "M");
+    qr.addData(link);
+    qr.make();
+    els.qrHolder.innerHTML = qr.createSvgTag({ cellSize: 4, margin: 0 });
+  } else {
+    els.qrHolder.innerHTML = `<p class="text-muted" style="color:#000; padding:10px;">QR generator unavailable</p>`;
+  }
 
   els.linkBox.textContent = link;
 
@@ -249,7 +283,7 @@ function showResult(transferId, key, expiresIn, statusOverride) {
   const tick = () => {
     const mm = String(Math.floor(remaining / 60)).padStart(2, "0");
     const ss = String(remaining % 60).padStart(2, "0");
-    setResultStatus(`Session expires in ${mm}:${ss}`);
+    setResultStatus(`Session active — expires in ${mm}:${ss}`);
   };
   tick();
   clearInterval(window.__lynkCountdown);
@@ -270,15 +304,35 @@ function setResultStatus(message, tone) {
 }
 
 els.tierLabel.textContent = "20 MB";
+
 els.fileInput.addEventListener("change", () => {
-  selectedFiles = Array.from(els.fileInput.files ?? []);
+  const newFiles = Array.from(els.fileInput.files ?? []);
+  selectedFiles = [...selectedFiles, ...newFiles];
+  els.fileInput.value = "";
   refreshPickState();
 });
 
-els.dropZone.addEventListener("dragover", (event) => event.preventDefault());
-els.dropZone.addEventListener("drop", (event) => {
-  event.preventDefault();
-  selectedFiles = Array.from(event.dataTransfer?.files ?? []);
+// Drag and drop events
+els.dropZone.addEventListener("dragover", (e) => {
+  e.preventDefault();
+  els.dropZone.classList.add("drag-active");
+});
+
+els.dropZone.addEventListener("dragenter", (e) => {
+  e.preventDefault();
+  els.dropZone.classList.add("drag-active");
+});
+
+els.dropZone.addEventListener("dragleave", (e) => {
+  e.preventDefault();
+  els.dropZone.classList.remove("drag-active");
+});
+
+els.dropZone.addEventListener("drop", (e) => {
+  e.preventDefault();
+  els.dropZone.classList.remove("drag-active");
+  const dropped = Array.from(e.dataTransfer?.files ?? []);
+  selectedFiles = [...selectedFiles, ...dropped];
   refreshPickState();
 });
 
@@ -286,12 +340,16 @@ els.p2pButton.addEventListener("click", () => sendP2P());
 els.cloudButton.addEventListener("click", () => sendCloud());
 
 document.getElementById("scan-pair-button").addEventListener("click", async () => {
-  if (!selectedFiles.length) return;
+  if (!selectedFiles.length) {
+    els.pickStatus.textContent = "Select files first before pairing.";
+    els.pickStatus.className = "status-pill status-warn";
+    return;
+  }
   const scannerCard = document.getElementById("scanner-card");
   const video = document.getElementById("camera-preview");
   const scanStatus = document.getElementById("scan-status");
   scannerCard.classList.remove("hidden");
-  scanStatus.textContent = "Starting camera…";
+  scanStatus.textContent = "Starting camera...";
 
   try {
     const link = await scanReceiverQr(video, {
@@ -306,12 +364,12 @@ document.getElementById("scan-pair-button").addEventListener("click", async () =
     if (!parsed.sessionId || !parsed.publicKeyB64) {
       scanStatus.textContent = "";
       document.getElementById("pair-state").textContent =
-        "That QR was not a Lynk receiver code.";
+        "QR code was not a valid Lynk receiver code.";
       return;
     }
     pendingPair = parsed;
     document.getElementById("pair-state").textContent =
-      "✓ Paired with your phone — send via Cloud Session.";
+      "Paired with phone — select Cloud Session to send.";
   } catch (err) {
     scannerCard.classList.add("hidden");
     cancelScan = null;
@@ -328,14 +386,19 @@ document.getElementById("scan-cancel-button").addEventListener("click", () => {
 els.copyButton.addEventListener("click", async () => {
   try {
     await navigator.clipboard.writeText(els.linkBox.textContent);
-    setResultStatus("Link copied.");
+    const origText = els.copyButton.textContent;
+    els.copyButton.textContent = "Copied";
+    setResultStatus("Link copied to clipboard.", "success");
+    setTimeout(() => {
+      els.copyButton.textContent = origText;
+    }, 2500);
   } catch {
     const range = document.createRange();
     range.selectNodeContents(els.linkBox);
     const selection = window.getSelection();
     selection.removeAllRanges();
     selection.addRange(range);
-    setResultStatus("Press Ctrl/Cmd+C to copy the selected link.", "error");
+    setResultStatus("Press Ctrl/Cmd+C to copy link.", "warn");
   }
 });
 
@@ -345,10 +408,12 @@ els.extendButton.addEventListener("click", async () => {
   try {
     const api = new LynkApi({ baseUrl: resolveApiBase() });
     const result = await api.extendTransfer(currentTransferId);
-    setResultStatus(`Session extended — ${Math.round(result.expiresIn / 60)} minutes remaining.`);
+    setResultStatus(`Session extended — ${Math.round(result.expiresIn / 60)} minutes remaining.`, "success");
   } catch {
-    setResultStatus("Could not extend the session.", "error");
+    setResultStatus("Could not extend session.", "error");
   } finally {
     els.extendButton.disabled = false;
   }
 });
+
+refreshPickState();

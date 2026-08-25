@@ -3,61 +3,101 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Lynk — Private, instant file sharing</title>
-  <meta name="description" content="End-to-end encrypted file sharing. No accounts, no uploads to prying servers. Scan, send, done." />
+  <title>Lynk — Private, Zero-Registration File Sharing</title>
+  <meta name="description" content="Share files instantly with zero accounts and 100% client-side AES-256 encryption. Direct WebRTC P2P transfers and secure Cloud sessions on Android, iOS, and Web." />
+  <meta name="keywords" content="file transfer, send large files, encrypted file sharing, P2P file share, WebRTC direct transfer, zero knowledge file sharing, AirDrop alternative, Lynk" />
+  <meta name="author" content="Lynk" />
+  <meta name="robots" content="index, follow" />
+  <link rel="canonical" href="https://lynkshare.app/" />
+
+  <!-- Open Graph / Facebook -->
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://lynkshare.app/" />
+  <meta property="og:title" content="Lynk — Private, Zero-Registration File Sharing" />
+  <meta property="og:description" content="End-to-end encrypted file sharing. No accounts, no uploads to prying servers. Scan, send, done." />
+  <meta property="og:image" content="https://lynkshare.app/assets/icons/icon-512.png" />
+  <meta property="og:site_name" content="Lynk" />
+
+  <!-- Twitter -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:url" content="https://lynkshare.app/" />
+  <meta name="twitter:title" content="Lynk — Private, Zero-Registration File Sharing" />
+  <meta name="twitter:description" content="End-to-end encrypted file sharing. No accounts, no uploads to prying servers. Scan, send, done." />
+  <meta name="twitter:image" content="https://lynkshare.app/assets/icons/icon-512.png" />
+
+  <!-- JSON-LD Structured Data -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "Lynk",
+    "url": "https://lynkshare.app/",
+    "applicationCategory": "UtilitiesApplication",
+    "operatingSystem": "Web, Android, iOS",
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "USD"
+    },
+    "description": "Zero-registration, end-to-end AES-256 encrypted file transfer platform supporting direct WebRTC P2P and encrypted Cloud sessions."
+  }
+  </script>
+
   <meta name="lynk-adsense-client" content="" />
   <link rel="manifest" href="/manifest.webmanifest" />
-  <meta name="theme-color" content="#6C5CE7" />
+  <meta name="theme-color" content="#09090b" />
   <link rel="icon" type="image/png" sizes="192x192" href="/assets/icons/icon-192.png" />
   <link rel="stylesheet" href="/assets/styles.css" />
 </head>
 <body>
   <div class="container">
     <nav class="navbar">
-      <a class="brand" href="/">
-        <span class="brand-mark">⚡</span>
+      <a class="brand" href="/" aria-label="Lynk Home">
+        <span class="brand-mark">L</span>
         Lynk
       </a>
-      <a class="btn btn-secondary" href="/app/send.html">Send a file</a>
+      <div class="nav-links">
+        <a class="btn btn-secondary" href="/app/receive.html">Receive</a>
+        <a class="btn btn-primary" href="/app/send.html">Send Files</a>
+      </div>
     </nav>
 
     <main>
       <section class="hero">
-        <span class="status-pill">🔒 End-to-end encrypted · zero registration</span>
-        <h1>Files travel <span class="gradient-text">directly</span>.<br />Nobody reads them in between.</h1>
+        <span class="eyebrow">Zero Knowledge · Zero Registration</span>
+        <h1>Direct, encrypted file transfer for the web.</h1>
         <p>
-          Pick a file, show a QR code, done. AES-256 encryption happens on your
-          device — the server only ever moves ciphertext it cannot read.
+          AES-256 encryption runs locally on your device. File keys reside strictly in the URL fragment and never touch any server.
         </p>
-        <div style="display: flex; gap: 12px; justify-content: center; margin-top: 32px; flex-wrap: wrap;">
-          <a class="btn btn-primary" href="/app/send.html">⚡ Send a file</a>
-          <a class="btn btn-secondary" href="/app/receive.html">📥 Receive a file</a>
+        <div style="display: flex; gap: 12px; margin-top: 28px; flex-wrap: wrap;">
+          <a class="btn btn-primary" href="/app/send.html" style="padding: 14px 24px;">Send Files</a>
+          <a class="btn btn-secondary" href="/app/receive.html" style="padding: 14px 24px;">Receive Files</a>
         </div>
       </section>
 
       <section class="feature-grid">
-        <div class="feature-card glass-card">
-          <h3>🔐 Client-side encryption</h3>
-          <p>AES-256 keys live only in the link you share — servers never see them.</p>
+        <div class="feature-card">
+          <h3>Client-Side AES-256</h3>
+          <p>Keys live exclusively in your link fragment — servers have zero mathematical visibility into your files.</p>
         </div>
-        <div class="feature-card glass-card">
-          <h3>⚡ Direct P2P transfer</h3>
-          <p>Device-to-device over WebRTC when possible — maximum speed, no middleman.</p>
+        <div class="feature-card">
+          <h3>Instant P2P Direct</h3>
+          <p>Stream directly peer-to-peer over WebRTC data channels with no intermediate storage.</p>
         </div>
-        <div class="feature-card glass-card">
-          <h3>☁️ Cloud fallback</h3>
-          <p>P2P blocked? Encrypted copies relay via storage that never holds a key.</p>
+        <div class="feature-card">
+          <h3>Cloud Fallback</h3>
+          <p>When direct connections are blocked by firewalls, encrypted chunks relay seamlessly via secure storage.</p>
         </div>
-        <div class="feature-card glass-card">
-          <h3>🚫 No accounts</h3>
-          <p>No sign-ups, no emails, no tracking. Open a page and start sharing.</p>
+        <div class="feature-card">
+          <h3>No Registration</h3>
+          <p>No user accounts, emails, phone numbers, or tracking. Open the page and share immediately.</p>
         </div>
       </section>
 
-      <section class="glass-card" style="margin-top: 24px;">
-        <div style="display: flex; justify-content: space-between; align-items: center;">
-          <h3 style="font-size: 1.05rem;">Recent activity</h3>
-          <button id="history-clear" class="btn btn-secondary" style="padding: 6px 14px; font-size: 0.8rem;">
+      <section class="card" style="margin-top: 24px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+          <h3 style="font-size: 1.05rem;">Recent Activity</h3>
+          <button id="history-clear" class="btn btn-secondary" style="padding: 4px 12px; font-size: 0.8rem;">
             Clear
           </button>
         </div>
@@ -66,6 +106,16 @@
 
       <div data-ad-banner="" style="margin: 24px 0;"></div>
     </main>
+
+    <footer class="footer">
+      <div class="footer-links">
+        <a href="/">Home</a>
+        <a href="/app/send.html">Send</a>
+        <a href="/app/receive.html">Receive</a>
+        <a href="https://sites.google.com/view/lynk-privacy-policy" target="_blank" rel="noopener">Privacy</a>
+      </div>
+      <p>&copy; 2026 Lynk. Zero-knowledge client-side encrypted file transfer.</p>
+    </footer>
   </div>
 
   <script type="module" src="/js/mount_ads.js"></script>

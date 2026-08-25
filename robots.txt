@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Allow: /app/send.html
+Allow: /app/receive.html
+Disallow: /tools/
+
+Sitemap: https://lynkshare.app/sitemap.xml

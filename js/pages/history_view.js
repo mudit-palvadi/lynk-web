@@ -16,12 +16,12 @@ export function renderHistory(container, store = new HistoryStore()) {
   const records = store.list();
   if (records.length === 0) {
     container.innerHTML =
-      '<p class="text-muted" style="font-size:0.9rem;">No transfers in this tab session yet.</p>';
+      '<p class="text-muted" style="font-size:0.88rem;">No transfers in this tab session yet.</p>';
     return;
   }
   const items = records
     .map((r) => {
-      const arrow = r.type === "sent" ? "⬆️" : "⬇️";
+      const typeBadge = r.type === "sent" ? "SENT" : "RECEIVED";
       const names =
         r.fileNames.length > 2
           ? `${escapeHtml(r.fileNames[0])} +${r.fileNames.length - 1} more`
@@ -30,11 +30,14 @@ export function renderHistory(container, store = new HistoryStore()) {
         hour: "2-digit",
         minute: "2-digit",
       });
-      return `<li style="display:flex; justify-content:space-between; gap:12px; padding:10px 0; border-bottom:1px solid var(--border); font-size:0.92rem;">
-        <span>${arrow} ${names}</span>
-        <span class="text-muted">${formatBytes(r.totalSize)} · ${when}</span>
+      return `<li style="display:flex; justify-content:space-between; align-items:center; gap:12px; padding:10px 0; border-bottom:1px solid var(--border); font-size:0.9rem;">
+        <span style="display:flex; align-items:center; gap:8px; min-width:0;">
+          <span style="font-size:0.7rem; font-weight:700; background:var(--surface-strong); border:1px solid var(--border); padding:2px 6px; border-radius:4px; color:var(--text-muted);">${typeBadge}</span>
+          <span style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${names}</span>
+        </span>
+        <span class="text-muted" style="font-size:0.82rem; flex-shrink:0;">${formatBytes(r.totalSize)} · ${when}</span>
       </li>`;
     })
     .join("");
-  container.innerHTML = `<ul style="list-style:none; margin-top:12px;">${items}</ul>`;
+  container.innerHTML = `<ul style="list-style:none; margin-top:8px;">${items}</ul>`;
 }

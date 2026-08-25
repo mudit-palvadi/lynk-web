@@ -3,105 +3,148 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Send Files Securely &amp; Instantly — Lynk</title>
+  <meta name="description" content="Send files with end-to-end client-side AES-256 encryption directly from your browser. Instant P2P direct transfer or Cloud sessions with QR code sharing." />
+  <meta name="keywords" content="send file, secure file transfer, encrypted file sharing, P2P file share, WebRTC transfer, direct send, Lynk" />
+  <meta name="robots" content="index, follow" />
+  <link rel="canonical" href="https://lynkshare.app/app/send.html" />
+
+  <!-- Open Graph / Facebook -->
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://lynkshare.app/app/send.html" />
+  <meta property="og:title" content="Send Files Securely &amp; Instantly — Lynk" />
+  <meta property="og:description" content="Send files with end-to-end AES-256 client-side encryption. No server ever sees your files." />
+  <meta property="og:image" content="https://lynkshare.app/assets/icons/icon-512.png" />
+  <meta property="og:site_name" content="Lynk" />
+
+  <!-- Twitter -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:url" content="https://lynkshare.app/app/send.html" />
+  <meta name="twitter:title" content="Send Files Securely &amp; Instantly — Lynk" />
+  <meta name="twitter:description" content="Send files with end-to-end AES-256 client-side encryption. No server ever sees your files." />
+  <meta name="twitter:image" content="https://lynkshare.app/assets/icons/icon-512.png" />
+
+  <!-- JSON-LD Structured Data -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebApplication",
+    "name": "Lynk — Send Files",
+    "url": "https://lynkshare.app/app/send.html",
+    "applicationCategory": "UtilitiesApplication",
+    "operatingSystem": "All",
+    "browserRequirements": "Requires JavaScript. Requires HTML5.",
+    "description": "Send end-to-end encrypted files directly from your browser with zero registration via direct P2P or Cloud sessions."
+  }
+  </script>
+
   <meta name="lynk-api-base" content="https://api.lynkshare.app" />
   <meta name="lynk-adsense-client" content="" />
   <link rel="manifest" href="/manifest.webmanifest" />
-  <meta name="theme-color" content="#6C5CE7" />
+  <meta name="theme-color" content="#09090b" />
   <link rel="icon" type="image/png" sizes="192x192" href="/assets/icons/icon-192.png" />
-  <title>Send a file — Lynk</title>
   <link rel="stylesheet" href="/assets/styles.css" />
 </head>
 <body>
   <div class="container">
     <nav class="navbar">
-      <a class="brand" href="/">
-        <span class="brand-mark">⚡</span>
+      <a class="brand" href="/" aria-label="Lynk Home">
+        <span class="brand-mark">L</span>
         Lynk
       </a>
-      <a class="btn btn-secondary" href="/app/receive.html">Receive</a>
+      <div class="nav-links">
+        <a class="btn btn-secondary" href="/app/receive.html">Receive</a>
+      </div>
     </nav>
 
     <main>
-      <section id="pick-card" class="glass-card" style="margin-top: 40px;">
-        <h2>Send files</h2>
-        <p class="text-muted" style="margin-top: 8px;">
-          Files are encrypted on this device before upload. Free tier:
-          <span id="tier-label"></span> total.
-        </p>
+      <section id="pick-card" class="card">
+        <div class="card-header">
+          <span class="eyebrow">Client-side Encryption</span>
+          <h2>Send Files</h2>
+          <p style="margin-top: 6px;">
+            Files are encrypted with AES-256 before leaving your device. Free tier:
+            <strong id="tier-label" style="color: var(--text);">20 MB</strong>.
+          </p>
+        </div>
 
-        <label
-          id="drop-zone"
-          for="file-input"
-          style="display: block; margin-top: 20px; padding: 36px; border: 2px dashed var(--border); border-radius: var(--radius-md); text-align: center; cursor: pointer; color: var(--text-muted);"
-        >
-          📁 Tap to choose files (or drop them here)
+        <label id="drop-zone" class="drop-zone" for="file-input">
+          <span class="drop-label-main">Choose files to send</span>
+          <span class="drop-label-sub">or drag and drop them here</span>
         </label>
         <input id="file-input" type="file" multiple hidden />
 
-        <ul id="file-list" style="list-style: none; margin-top: 16px;"></ul>
+        <ul id="file-list" class="file-list"></ul>
 
         <div id="pick-status" class="status-pill" style="margin-top: 16px;"></div>
 
-        <div style="display: flex; gap: 12px; margin-top: 20px; flex-wrap: wrap;">
-          <button id="send-p2p-button" class="btn btn-primary hidden" style="flex: 1;">
-            ⚡ Instant P2P Direct
+        <div style="display: flex; gap: 10px; margin-top: 20px; flex-wrap: wrap;">
+          <button id="send-p2p-button" class="btn btn-primary hidden" style="flex: 1; min-width: 180px;">
+            Instant P2P Direct
           </button>
-          <button id="send-cloud-button" class="btn btn-secondary hidden" style="flex: 1;">
-            ☁️ Cloud Session
+          <button id="send-cloud-button" class="btn btn-secondary hidden" style="flex: 1; min-width: 180px;">
+            Cloud Session (10m)
           </button>
         </div>
 
-        <div style="margin-top: 20px; border-top: 1px solid var(--border); padding-top: 16px;">
-          <p class="text-muted" style="font-size: 0.9rem;">
-            Phone showing its Lynk receive QR? Scan it to pair — the file will
-            appear on your phone automatically.
+        <div style="margin-top: 24px; border-top: 1px solid var(--border); padding-top: 18px;">
+          <p style="font-size: 0.88rem;">
+            Phone showing its Lynk receive code? Scan it to pair:
           </p>
-          <div style="display: flex; gap: 10px; margin-top: 10px; align-items: center;">
-            <button id="scan-pair-button" class="btn btn-secondary">📷 Scan phone QR</button>
+          <div style="display: flex; gap: 10px; margin-top: 10px; align-items: center; flex-wrap: wrap;">
+            <button id="scan-pair-button" class="btn btn-secondary">Scan Phone QR</button>
             <span id="pair-state" class="text-muted" style="font-size: 0.85rem;"></span>
           </div>
         </div>
       </section>
 
-      <section id="scanner-card" class="glass-card hidden" style="margin-top: 40px;">
-        <h2>Scan the receiver QR</h2>
-        <video id="camera-preview" playsinline muted style="width: 100%; max-width: 420px; border-radius: var(--radius-md); margin-top: 16px; background: #000;"></video>
-        <p id="scan-status" class="text-muted" style="margin-top: 12px;"></p>
-        <button id="scan-cancel-button" class="btn btn-secondary" style="margin-top: 8px;">Cancel</button>
+      <section id="scanner-card" class="card hidden" style="margin-top: 20px;">
+        <h2>Scan Receiver Code</h2>
+        <video id="camera-preview" playsinline muted style="width: 100%; max-width: 400px; border-radius: var(--radius-sm); margin-top: 14px; background: #000;"></video>
+        <p id="scan-status" class="text-muted" style="margin-top: 10px;"></p>
+        <button id="scan-cancel-button" class="btn btn-secondary" style="margin-top: 10px;">Cancel</button>
       </section>
 
-      <section id="progress-card" class="glass-card hidden" style="margin-top: 40px;">
-        <h2 id="progress-title">Encrypting…</h2>
-        <div class="progress-track" style="margin-top: 24px;">
+      <section id="progress-card" class="card hidden" style="margin-top: 20px;">
+        <h2 id="progress-title">Encrypting Files...</h2>
+        <div class="progress-track" style="margin-top: 20px;">
           <div id="progress-fill" class="progress-fill" style="width: 0%;"></div>
         </div>
         <p id="progress-label" class="text-muted" style="margin-top: 8px; font-size: 0.85rem;"></p>
       </section>
 
-      <section id="result-card" class="glass-card hidden" style="margin-top: 40px;">
-        <h2>Scan or share</h2>
-        <p class="text-muted" style="margin-top: 8px;">
-          The recipient scans the QR — or opens the link on any device.
-          The key lives only in this link; keep it private.
+      <section id="result-card" class="card hidden" style="margin-top: 20px;">
+        <h2>Share Transfer</h2>
+        <p style="margin-top: 6px;">
+          The recipient scans this QR code or opens the link. The key is in the link fragment.
         </p>
-        <div id="qr-holder" style="margin: 24px auto 0; width: fit-content; background: #fff; border-radius: var(--radius-md); padding: 12px;"></div>
-        <div
-          id="link-box"
-          style="margin-top: 20px; background: var(--surface-strong); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 12px 14px; font-size: 0.85rem; word-break: break-all; user-select: all;"
-        ></div>
+        <div id="qr-holder" class="qr-frame"></div>
+        <div style="margin-top: 16px;">
+          <div id="link-box" class="link-box"></div>
+        </div>
         <div style="display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap;">
-          <button id="copy-button" class="btn btn-primary" style="flex: 1;">📋 Copy link</button>
-          <button id="extend-button" class="btn btn-secondary" style="flex: 1;">⏱️ Extend to 30 min</button>
+          <button id="copy-button" class="btn btn-primary" style="flex: 1;">Copy Link</button>
+          <button id="extend-button" class="btn btn-secondary" style="flex: 1;">Extend to 30m</button>
         </div>
         <div id="result-status" class="status-pill" style="margin-top: 16px;"></div>
       </section>
 
-      <div data-ad-banner="" style="margin-top: 32px;"></div>
+      <div data-ad-banner="" style="margin-top: 28px;"></div>
     </main>
+
+    <footer class="footer">
+      <div class="footer-links">
+        <a href="/">Home</a>
+        <a href="/app/send.html">Send</a>
+        <a href="/app/receive.html">Receive</a>
+        <a href="https://sites.google.com/view/lynk-privacy-policy" target="_blank" rel="noopener">Privacy</a>
+      </div>
+      <p>&copy; 2026 Lynk. Zero-knowledge client-side encrypted file transfer.</p>
+    </footer>
   </div>
 
-  <script type="module" src="/js/mount_ads.js"></script>
   <script src="/js/lib/qrcode.js"></script>
+  <script type="module" src="/js/mount_ads.js"></script>
   <script type="module" src="/js/pages/send.js"></script>
 </body>
 </html>
