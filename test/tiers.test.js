@@ -8,13 +8,13 @@ import {
 
 const MB = 1024 * 1024;
 
-test("cloud tier is 20 MB free and 50 MB unlocked", () => {
-  assert.equal(maxTotalSize("cloud", false), 20 * MB);
-  assert.equal(maxTotalSize("cloud", true), 50 * MB);
+test("cloud tier is 10 MB free and 30 MB unlocked", () => {
+  assert.equal(maxTotalSize("cloud", false), 10 * MB);
+  assert.equal(maxTotalSize("cloud", true), 30 * MB);
 });
 
-test("p2p tier is 50 MB free and 100 MB unlocked", () => {
-  assert.equal(maxTotalSize("p2p", false), 50 * MB);
+test("p2p tier is 10 MB free and 100 MB unlocked", () => {
+  assert.equal(maxTotalSize("p2p", false), 10 * MB);
   assert.equal(maxTotalSize("p2p", true), 100 * MB);
 });
 
@@ -27,7 +27,7 @@ test("encrypted size adds IV prefix plus PKCS7 padding like the app", () => {
 
 test("selection within the active limit passes", () => {
   const result = validateSelection(
-    [{ name: "a", size: 10 * MB }],
+    [{ name: "a", size: 1 * MB }],
     "cloud",
     false,
   );
@@ -41,7 +41,7 @@ test("selection exceeding the free cloud limit fails with a hint", () => {
     false,
   );
   assert.equal(result.ok, false);
-  assert.match(result.reason, /20/);
+  assert.match(result.reason, /10/);
 });
 
 test("empty selection fails", () => {

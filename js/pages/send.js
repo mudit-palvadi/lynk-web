@@ -1,7 +1,7 @@
 import { resolveApiBase } from "../core/config.js";
 import { LynkApi, LimitExceededError } from "../core/api.js";
 import { encryptWithIvPrefix } from "../core/crypto.js";
-import { encryptedSize, validateSelection } from "../core/tiers.js";
+import { encryptedSize, maxTotalSize, validateSelection } from "../core/tiers.js";
 import { buildSendLink } from "../core/link_builder.js";
 import { parseReceiverQrLink } from "../core/link_parser.js";
 import { isP2pSupported, sendViaP2p } from "../core/p2p_session.js";
@@ -116,7 +116,7 @@ function refreshPickState() {
   const validation = validateSelection(selectedFiles, MODE, false);
 
   if (selectedFiles.length === 0) {
-    els.pickStatus.textContent = "Free tier allows up to 20 MB total.";
+    els.pickStatus.textContent = `Free tier allows up to ${maxTotalSize("cloud", false) / (1024 * 1024)} MB total.`;
     els.pickStatus.className = "status-pill";
     els.p2pButton.classList.add("hidden");
     els.cloudButton.classList.add("hidden");
@@ -303,7 +303,7 @@ function setResultStatus(message, tone) {
   els.resultStatus.className = `status-pill${tone ? ` status-${tone}` : ""}`;
 }
 
-els.tierLabel.textContent = "20 MB";
+els.tierLabel.textContent = `${maxTotalSize("cloud", false) / (1024 * 1024)} MB`;
 
 els.fileInput.addEventListener("change", () => {
   const newFiles = Array.from(els.fileInput.files ?? []);

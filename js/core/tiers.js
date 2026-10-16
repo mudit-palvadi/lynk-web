@@ -2,9 +2,9 @@ const MB = 1024 * 1024;
 
 export function maxTotalSize(mode, unlocked) {
   if (mode === "p2p") {
-    return unlocked ? 100 * MB : 50 * MB;
+    return unlocked ? 100 * MB : 10 * MB;
   }
-  return unlocked ? 50 * MB : 20 * MB;
+  return unlocked ? 30 * MB : 10 * MB;
 }
 
 export function encryptedSize(plainSize) {
