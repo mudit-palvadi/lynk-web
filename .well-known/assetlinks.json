@@ -5,7 +5,8 @@
       "namespace": "android_app",
       "package_name": "app.xynix.lynk",
       "sha256_cert_fingerprints": [
-        "74:25:40:24:ED:53:EF:1F:A7:8F:00:B7:D1:72:7B:6A:CC:4B:12:B9:20:8D:EB:8D:48:11:58:6C:6C:C8:F0:94"
+        "74:25:40:24:ED:53:EF:1F:A7:8F:00:B7:D1:72:7B:6A:CC:4B:12:B9:20:8D:EB:8D:48:11:58:6C:6C:C8:F0:94",
+        "1E:16:7F:D3:94:36:E0:EA:91:95:24:B3:28:51:FC:EA:8A:84:18:85:D4:7C:9B:8B:0A:5F:2F:4D:81:F8:94:D6"
       ]
     }
   }
