@@ -75,7 +75,21 @@ async function agreeKek(privateKeySeedOrKey, remotePublicKeyBytes, sessionId) {
   return deriveKekBytes(shared, sessionId);
 }
 
-export async function wrapKey({ aesKey, receiverPublicKeyB64, sessionId }) {
+function wrappedPlaintext(aesKey, accessToken) {
+  if (!accessToken) return aesKey;
+  return `v2\n${aesKey}\n${accessToken}`;
+}
+
+export function splitWrappedPlaintext(plain) {
+  const prefix = "v2\n";
+  if (!plain.startsWith(prefix)) return { aesKey: plain, accessToken: "" };
+  const rest = plain.slice(prefix.length);
+  const splitAt = rest.indexOf("\n");
+  if (splitAt < 0) return { aesKey: rest, accessToken: "" };
+  return { aesKey: rest.slice(0, splitAt), accessToken: rest.slice(splitAt + 1) };
+}
+
+export async function wrapKey({ aesKey, receiverPublicKeyB64, sessionId, accessToken }) {
   const ephemeral = await crypto.subtle.generateKey({ name: "X25519" }, true, [
     "deriveBits",
   ]);
@@ -83,7 +97,7 @@ export async function wrapKey({ aesKey, receiverPublicKeyB64, sessionId }) {
 
   const kek = await agreeKek(ephemeral.privateKey, decodeBase64Url(receiverPublicKeyB64), sessionId);
 
-  const aesKeyBytes = new TextEncoder().encode(aesKey);
+  const aesKeyBytes = new TextEncoder().encode(wrappedPlaintext(aesKey, accessToken));
   const nonce = crypto.getRandomValues(new Uint8Array(12));
   const aad = new TextEncoder().encode(sessionId);
   const params = { name: "AES-GCM", iv: nonce, additionalData: aad, tagLength: 128 };
@@ -103,6 +117,11 @@ export async function wrapKey({ aesKey, receiverPublicKeyB64, sessionId }) {
 }
 
 export async function unwrapKey({ wrappedBase64, privateKeySeed, sessionId }) {
+  const delivery = await unwrapDelivery({ wrappedBase64, privateKeySeed, sessionId });
+  return delivery.aesKey;
+}
+
+export async function unwrapDelivery({ wrappedBase64, privateKeySeed, sessionId }) {
   const bytes = decodeBase64Url(wrappedBase64);
   if (bytes.length < 60) {
     throw new Error("wrapped_key payload too short");
@@ -125,5 +144,5 @@ export async function unwrapKey({ wrappedBase64, privateKeySeed, sessionId }) {
     kekKey,
     sealed,
   );
-  return new TextDecoder().decode(plain);
+  return splitWrappedPlaintext(new TextDecoder().decode(plain));
 }

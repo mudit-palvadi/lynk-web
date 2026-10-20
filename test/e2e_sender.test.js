@@ -37,18 +37,28 @@ test("web sender cloud flow round-trips through live backend and R2", async () =
   });
   assert.equal(uploadResponse.status, 200);
 
-  const completion = await api.completeFile(created.transferId, created.files[0].fileId);
+  const completion = await api.completeFile(
+    created.transferId,
+    created.files[0].fileId,
+    created.senderSecret,
+  );
   assert.ok(completion);
 
-  const extended = await api.extendTransfer(created.transferId);
+  const extended = await api.extendTransfer(created.transferId, created.senderSecret);
   assert.equal(extended.expiresIn, 1800);
 
-  const link = buildSendLink("https://lynkshare.app", created.transferId, key);
+  const link = buildSendLink(
+    "https://lynkshare.app",
+    created.transferId,
+    key,
+    created.accessToken,
+  );
   const parsedBack = parseSendLink(new URL(link));
   assert.equal(parsedBack.transferId, created.transferId);
   assert.equal(parsedBack.aesKey, key);
+  assert.equal(parsedBack.accessToken, created.accessToken);
 
-  const downloads = await api.getDownloadUrls(created.transferId);
+  const downloads = await api.getDownloadUrls(created.transferId, parsedBack.accessToken);
   const response = await fetch(downloads[0].downloadUrl);
   const ciphertext = new Uint8Array(await response.arrayBuffer());
   const recovered = await decryptWithIvPrefix(ciphertext, parsedBack.aesKey);

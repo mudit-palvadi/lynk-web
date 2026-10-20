@@ -9,7 +9,16 @@ test("extracts transfer id and fragment key from a canonical deep link", () => {
   assert.deepEqual(parsed, {
     transferId: "abc-123",
     aesKey: "deadbeef00112233445566778899aabb",
+    accessToken: "",
   });
+});
+
+test("splits the access token out of the fragment", () => {
+  const parsed = parseSendLink(
+    new URL("https://lynkshare.app/send/abc-123#deadbeef&a=access-token"),
+  );
+  assert.equal(parsed.aesKey, "deadbeef");
+  assert.equal(parsed.accessToken, "access-token");
 });
 
 test("fragment wins over query parameter", () => {
@@ -38,10 +47,12 @@ test("missing parts degrade to empty strings instead of throwing", () => {
   assert.deepEqual(parseSendLink(new URL("https://lynkshare.app/")), {
     transferId: "",
     aesKey: "",
+    accessToken: "",
   });
   assert.deepEqual(parseSendLink(new URL("https://lynkshare.app/send/only-id")), {
     transferId: "only-id",
     aesKey: "",
+    accessToken: "",
   });
 });
 
