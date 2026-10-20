@@ -1,5 +1,10 @@
 const MB = 1024 * 1024;
 
+// The `unlocked` tiers exist for the app's rewarded-ad flow: watching an ad
+// raises the limit. The website has no ad or reward flow, so it always
+// enforces the free tier - every call site here passes `false`. The sender
+// page labels the same limit it validates, so the number the user sees is
+// always the number that is enforced.
 export function maxTotalSize(mode, unlocked) {
   if (mode === "p2p") {
     return unlocked ? 30 * MB : 10 * MB;
