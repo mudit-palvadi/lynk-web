@@ -1,4 +1,5 @@
 import { parseSendLink, parseReceiverQrLink } from "../core/link_parser.js";
+import { safeFileName } from "../core/file_names.js";
 import { resolveApiBase } from "../core/config.js";
 import { LynkApi, TransferNotFoundError } from "../core/api.js";
 import { decryptWithIvPrefix } from "../core/crypto.js";
@@ -123,7 +124,9 @@ function saveBlob(bytes, fileName) {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
-  anchor.download = fileName;
+  // The name came from the sender, so it is reduced to a single safe path
+  // segment before the browser is asked to save it.
+  anchor.download = safeFileName(fileName);
   document.body.appendChild(anchor);
   anchor.click();
   anchor.remove();
