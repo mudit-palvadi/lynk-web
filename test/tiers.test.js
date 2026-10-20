@@ -8,14 +8,14 @@ import {
 
 const MB = 1024 * 1024;
 
-test("cloud tier is 10 MB free and 30 MB unlocked", () => {
+test("cloud tier is 10 MB free and 20 MB unlocked", () => {
   assert.equal(maxTotalSize("cloud", false), 10 * MB);
-  assert.equal(maxTotalSize("cloud", true), 30 * MB);
+  assert.equal(maxTotalSize("cloud", true), 20 * MB);
 });
 
-test("p2p tier is 10 MB free and 100 MB unlocked", () => {
+test("p2p tier is 10 MB free and 30 MB unlocked", () => {
   assert.equal(maxTotalSize("p2p", false), 10 * MB);
-  assert.equal(maxTotalSize("p2p", true), 100 * MB);
+  assert.equal(maxTotalSize("p2p", true), 30 * MB);
 });
 
 test("encrypted size adds IV prefix plus PKCS7 padding like the app", () => {
