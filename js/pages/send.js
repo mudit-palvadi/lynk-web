@@ -33,6 +33,8 @@ const MODE = "cloud";
 const historyStore = new HistoryStore();
 let selectedFiles = [];
 let currentTransferId = null;
+let currentSenderSecret = null;
+let currentAccessToken = null;
 let pendingPair = null;
 let cancelScan = null;
 
@@ -166,6 +168,8 @@ async function uploadEncrypted(encrypted, key) {
     encrypted.map((f) => ({ name: f.name, size: f.blob.length, type: "application/octet-stream" })),
   );
   currentTransferId = created.transferId;
+  currentSenderSecret = created.senderSecret;
+  currentAccessToken = created.accessToken;
 
   for (let i = 0; i < created.files.length; i++) {
     const target = created.files[i];
@@ -175,7 +179,7 @@ async function uploadEncrypted(encrypted, key) {
       body: encrypted[i].blob,
       headers: { "Content-Type": "application/octet-stream" },
     });
-    await api.completeFile(created.transferId, target.fileId);
+    await api.completeFile(created.transferId, target.fileId, currentSenderSecret);
   }
   setProgress(1, "Upload complete");
 
@@ -191,6 +195,7 @@ async function deliverToPairedPhone(encrypted, key) {
     const api = new LynkApi({ baseUrl: resolveApiBase() });
     const wrappedKey = await wrapKey({
       aesKey: key,
+      accessToken: currentAccessToken,
       receiverPublicKeyB64: pendingPair.publicKeyB64,
       sessionId: pendingPair.sessionId,
     });
@@ -261,7 +266,7 @@ function showResult(transferId, key, expiresIn, statusOverride) {
     window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
       ? window.location.origin
       : "https://lynkshare.app";
-  const link = buildSendLink(base, transferId, key);
+  const link = buildSendLink(base, transferId, key, currentAccessToken);
 
   if (typeof window.qrcode === "function") {
     const qr = window.qrcode(0, "M");
@@ -407,7 +412,7 @@ els.extendButton.addEventListener("click", async () => {
   els.extendButton.disabled = true;
   try {
     const api = new LynkApi({ baseUrl: resolveApiBase() });
-    const result = await api.extendTransfer(currentTransferId);
+    const result = await api.extendTransfer(currentTransferId, currentSenderSecret);
     setResultStatus(`Session extended — ${Math.round(result.expiresIn / 60)} minutes remaining.`, "success");
   } catch {
     setResultStatus("Could not extend session.", "error");

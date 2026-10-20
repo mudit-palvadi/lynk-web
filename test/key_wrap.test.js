@@ -5,6 +5,7 @@ import {
   generateReceiverKeyPair,
   wrapKey,
   unwrapKey,
+  unwrapDelivery,
   deriveKekBytes,
 } from "../js/core/key_wrap.js";
 
@@ -24,6 +25,29 @@ test("wrap/unwrap round trip recovers the AES key", async () => {
     receiverPublicKeyB64: receiver.publicKeyB64,
     sessionId: SESSION,
   });
+  const recovered = await unwrapKey({
+    wrappedBase64: wrapped,
+    privateKeySeed: receiver.privateKeySeed,
+    sessionId: SESSION,
+  });
+  assert.equal(recovered, AES_KEY);
+});
+
+test("v2 wrap carries the access token and still returns the AES key", async () => {
+  const receiver = await generateReceiverKeyPair();
+  const wrapped = await wrapKey({
+    aesKey: AES_KEY,
+    accessToken: "access-token-value",
+    receiverPublicKeyB64: receiver.publicKeyB64,
+    sessionId: SESSION,
+  });
+  const delivery = await unwrapDelivery({
+    wrappedBase64: wrapped,
+    privateKeySeed: receiver.privateKeySeed,
+    sessionId: SESSION,
+  });
+  assert.equal(delivery.aesKey, AES_KEY);
+  assert.equal(delivery.accessToken, "access-token-value");
   const recovered = await unwrapKey({
     wrappedBase64: wrapped,
     privateKeySeed: receiver.privateKeySeed,

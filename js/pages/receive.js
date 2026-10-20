@@ -4,7 +4,7 @@ import { LynkApi, TransferNotFoundError } from "../core/api.js";
 import { decryptWithIvPrefix } from "../core/crypto.js";
 import {
   generateReceiverKeyPair,
-  unwrapKey,
+  unwrapDelivery,
 } from "../core/key_wrap.js";
 import { isP2pSupported, receiveViaP2p } from "../core/p2p_session.js";
 import { HistoryStore } from "../core/history_store.js";
@@ -39,6 +39,7 @@ const els = {
 const state = {
   transferId: "",
   aesKey: "",
+  accessToken: "",
   metadata: null,
 };
 
@@ -71,7 +72,7 @@ async function loadTransfer() {
 
   try {
     const api = new LynkApi({ baseUrl: resolveApiBase() });
-    state.metadata = await api.getTransferMetadata(state.transferId);
+    state.metadata = await api.getTransferMetadata(state.transferId, state.accessToken);
   } catch (err) {
     if (err instanceof TransferNotFoundError) {
       setStatus("Transfer not found or expired. Ask the sender for a fresh QR code.", "error");
@@ -192,7 +193,7 @@ async function downloadViaCloud() {
 
   try {
     const api = new LynkApi({ baseUrl: resolveApiBase() });
-    const downloads = await api.getDownloadUrls(state.transferId);
+    const downloads = await api.getDownloadUrls(state.transferId, state.accessToken);
     if (downloads.length === 0) throw new Error("no downloadable files");
 
     let completed = 0;
@@ -231,6 +232,7 @@ function adoptLink(url) {
   const parsed = parseSendLink(url);
   state.transferId = parsed.transferId;
   state.aesKey = parsed.aesKey;
+  state.accessToken = parsed.accessToken;
 
   if (!state.transferId) {
     setStatus("Paste a full Lynk link (it looks like https://lynkshare.app/send/…#key).", "error");
@@ -243,7 +245,9 @@ function adoptLink(url) {
 
   const clean = new URL(window.location.href);
   clean.pathname = `/send/${encodeURIComponent(state.transferId)}`;
-  clean.hash = `#${state.aesKey}`;
+  clean.hash = state.accessToken
+    ? `#${state.aesKey}&a=${state.accessToken}`
+    : `#${state.aesKey}`;
   clean.searchParams.delete("url");
   window.history.replaceState(null, "", clean);
 
@@ -270,6 +274,7 @@ const direct = parseSendLink(new URL(window.location.href));
 if (direct.transferId && direct.aesKey) {
   state.transferId = direct.transferId;
   state.aesKey = direct.aesKey;
+  state.accessToken = direct.accessToken;
   loadTransfer();
 } else if (direct.transferId && !direct.aesKey) {
   setStatus("This link is missing its decryption key (#fragment). Use the original QR link.", "error");
@@ -338,13 +343,14 @@ function pollAttached(api, pairButton) {
       const session = await api.getReceiverSession(state.pairing.sessionId);
       if (session.status === "attached" && session.wrappedKey && session.transferId) {
         clearInterval(window.__lynkPoll);
-        const aesKey = await unwrapKey({
+        const delivery = await unwrapDelivery({
           wrappedBase64: session.wrappedKey,
           privateKeySeed: state.pairing.privateKeySeed,
           sessionId: state.pairing.sessionId,
         });
         state.transferId = session.transferId;
-        state.aesKey = aesKey;
+        state.aesKey = delivery.aesKey;
+        state.accessToken = delivery.accessToken;
         state.pairing = null;
         document.getElementById("paste-section").classList.add("hidden");
         loadTransfer();

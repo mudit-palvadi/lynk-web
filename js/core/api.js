@@ -35,14 +35,21 @@ async function parseJson(response) {
   }
 }
 
+function capabilityHeaders(name, value) {
+  if (!value) return {};
+  return { [name]: value };
+}
+
 export class LynkApi {
   constructor({ baseUrl, fetch = globalThis.fetch.bind(globalThis) }) {
     this.baseUrl = baseUrl.replace(/\/+$/, "");
     this.fetch = fetch;
   }
 
-  async getTransferMetadata(transferId) {
-    return this.request(`${this.baseUrl}/api/v1/transfers/${encodeURIComponent(transferId)}`);
+  async getTransferMetadata(transferId, accessToken) {
+    return this.request(`${this.baseUrl}/api/v1/transfers/${encodeURIComponent(transferId)}`, {
+      headers: capabilityHeaders("X-Lynk-Access-Token", accessToken),
+    });
   }
 
   async createTransfer(files) {
@@ -61,6 +68,8 @@ export class LynkApi {
       transferId: json.transfer_id,
       status: json.status,
       expiresIn: json.expires_in,
+      senderSecret: json.sender_secret,
+      accessToken: json.access_token,
       files: (json.files ?? []).map((f) => ({
         fileId: f.file_id,
         fileName: f.file_name,
@@ -70,17 +79,17 @@ export class LynkApi {
     };
   }
 
-  async completeFile(transferId, fileId) {
+  async completeFile(transferId, fileId, senderSecret) {
     return this.request(
       `${this.baseUrl}/api/v1/transfers/${encodeURIComponent(transferId)}/files/${encodeURIComponent(fileId)}/complete`,
-      { method: "POST" },
+      { method: "POST", headers: capabilityHeaders("X-Lynk-Sender-Secret", senderSecret) },
     );
   }
 
-  async extendTransfer(transferId) {
+  async extendTransfer(transferId, senderSecret) {
     const json = await this.request(
       `${this.baseUrl}/api/v1/transfers/${encodeURIComponent(transferId)}/extend`,
-      { method: "POST" },
+      { method: "POST", headers: capabilityHeaders("X-Lynk-Sender-Secret", senderSecret) },
     );
     return { transferId: json.transfer_id, status: json.status, expiresIn: json.expires_in };
   }
@@ -116,10 +125,17 @@ export class LynkApi {
     );
   }
 
-  async getDownloadUrls(transferId) {
+  async getDownloadUrls(transferId, accessToken) {
     const json = await this.request(
       `${this.baseUrl}/api/v1/transfers/${encodeURIComponent(transferId)}/downloads`,
-      { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ file_ids: null }) },
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...capabilityHeaders("X-Lynk-Access-Token", accessToken),
+        },
+        body: JSON.stringify({ file_ids: null }),
+      },
     );
     return (json?.files ?? []).map((f) => ({
       fileId: f.file_id,
