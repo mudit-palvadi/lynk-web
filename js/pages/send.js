@@ -150,36 +150,45 @@ async function encryptAll(key) {
   return encrypted;
 }
 
-function generateSessionId() {
-  const bytes = crypto.getRandomValues(new Uint8Array(16));
-  return Array.from(bytes)
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-}
-
-async function uploadEncrypted(encrypted, key) {
-  document.getElementById("pick-card").classList.add("hidden");
-  els.progressCard.classList.remove("hidden");
-  els.resultCard.classList.add("hidden");
-
+/// Creates the server-side transfer and remembers its credentials.
+///
+/// The P2P flow needs this *before* it starts: the receiver reads the
+/// transfer metadata before it connects, and the signaling server refuses
+/// rooms whose id it does not know. Creating the transfer up front also puts
+/// the access token into the share link, which the metadata call requires.
+async function createTransferSession(encrypted) {
   const api = new LynkApi({ baseUrl: resolveApiBase() });
-  els.progressTitle.textContent = "Uploading to Cloud Storage...";
   const created = await api.createTransfer(
     encrypted.map((f) => ({ name: f.name, size: f.blob.length, type: "application/octet-stream" })),
   );
   currentTransferId = created.transferId;
   currentSenderSecret = created.senderSecret;
   currentAccessToken = created.accessToken;
+  return created;
+}
 
-  for (let i = 0; i < created.files.length; i++) {
-    const target = created.files[i];
-    setProgress(0.25 + (i / created.files.length) * 0.7, `Uploading ${target.fileName}...`);
+/// Uploads the encrypted bytes to the transfer's presigned URLs.
+///
+/// `created` may be a transfer that was created earlier (the P2P fallback
+/// reuses it) so the link the receiver already has stays valid.
+async function uploadEncrypted(encrypted, key, created = null) {
+  document.getElementById("pick-card").classList.add("hidden");
+  els.progressCard.classList.remove("hidden");
+  els.resultCard.classList.add("hidden");
+
+  const api = new LynkApi({ baseUrl: resolveApiBase() });
+  els.progressTitle.textContent = "Uploading to Cloud Storage...";
+  const session = created ?? (await createTransferSession(encrypted));
+
+  for (let i = 0; i < session.files.length; i++) {
+    const target = session.files[i];
+    setProgress(0.25 + (i / session.files.length) * 0.7, `Uploading ${target.fileName}...`);
     await fetch(target.uploadUrl, {
       method: "PUT",
       body: encrypted[i].blob,
       headers: { "Content-Type": "application/octet-stream" },
     });
-    await api.completeFile(created.transferId, target.fileId, currentSenderSecret);
+    await api.completeFile(session.transferId, target.fileId, currentSenderSecret);
   }
   setProgress(1, "Upload complete");
 
@@ -187,7 +196,7 @@ async function uploadEncrypted(encrypted, key) {
     await deliverToPairedPhone(encrypted, key);
   }
   recordSend("completed (cloud)");
-  showResult(created.transferId, key, created.expiresIn);
+  showResult(session.transferId, key, session.expiresIn);
 }
 
 async function deliverToPairedPhone(encrypted, key) {
@@ -227,13 +236,23 @@ async function sendP2P() {
     const key = generateKey();
     const encrypted = await encryptAll(key);
 
-    const sessionId = generateSessionId();
-    showResult(sessionId, key, null, "Waiting for receiver to connect...");
+    // The P2P session is a real server-side transfer: the receiver fetches
+    // the transfer metadata before it opens the signaling room, and the
+    // signaling server only accepts rooms whose id it knows. The link also
+    // carries the access token, which the metadata call requires.
+    const created = await createTransferSession(encrypted);
+
+    showResult(
+      created.transferId,
+      key,
+      created.expiresIn,
+      "Waiting for receiver to connect...",
+    );
     setResultStatus("Waiting for receiver — keep this tab open.", "warn");
 
     const delivered = await sendViaP2p({
       apiBase: resolveApiBase(),
-      sessionId,
+      sessionId: created.transferId,
       files: encrypted,
       onStatus: (event) => {
         if (event === "p2p-sending") setResultStatus("Direct P2P streaming in progress...", "success");
@@ -250,7 +269,9 @@ async function sendP2P() {
       return;
     }
 
-    await uploadEncrypted(encrypted, key);
+    // Direct delivery failed: fall back to the cloud, but complete the SAME
+    // transfer, so the link the receiver already has keeps working.
+    await uploadEncrypted(encrypted, key, created);
   } catch (err) {
     els.progressTitle.textContent = "Something went wrong";
     els.progressLabel.textContent = err?.message ?? "Transfer failed.";
