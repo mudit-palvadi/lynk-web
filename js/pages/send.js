@@ -44,6 +44,11 @@ let currentSenderSecret = null;
 let currentLink = null;
 let currentAccessToken = null;
 let pendingPair = null;
+
+// Set once a phone is on the other end: connected over the direct channel,
+// or paired by scanning its QR. A QR code is only useful to a receiver that
+// does not have the transfer yet, so it is not shown again once this is true.
+let phoneIsReady = false;
 let cancelScan = null;
 
 function recordSend(status) {
@@ -204,7 +209,14 @@ async function uploadEncrypted(encrypted, key, created = null) {
     await deliverToPairedPhone(encrypted, key);
   }
   recordSend("completed (cloud)");
-  showResult(session.transferId, key, session.expiresIn);
+  // The QR is only useful to a receiver that does not have the transfer yet.
+  showResult(
+    session.transferId,
+    key,
+    session.expiresIn,
+    undefined,
+    phoneIsReady ? "sent" : "qr",
+  );
 }
 
 async function deliverToPairedPhone(encrypted, key) {
@@ -262,8 +274,23 @@ async function sendP2P() {
       apiBase: resolveApiBase(),
       sessionId: created.transferId,
       files: encrypted,
-      onStatus: (event) => {
-        if (event === "p2p-sending") setResultStatus("Direct P2P streaming in progress...", "success");
+      onStatus: (event, detail) => {
+        if (event === "p2p-connected") {
+          phoneIsReady = true;
+          setResultStatus("Phone connected - sending directly...", "success");
+        }
+        if (event === "p2p-sending") {
+          setResultStatus(
+            `Sending ${detail?.name ?? "files"} over P2P...`,
+            "success",
+          );
+        }
+        if (event === "p2p-delivered") {
+          setResultStatus(
+            "Delivered directly - the receiver has all the files.",
+            "success",
+          );
+        }
         if (typeof event === "string" && event.startsWith("p2p-failed")) {
           setResultStatus("Direct connection failed — switching to Cloud Session...", "warn");
         }
@@ -286,7 +313,7 @@ async function sendP2P() {
   }
 }
 
-function showResult(transferId, key, expiresIn, statusOverride) {
+function showResult(transferId, key, expiresIn, statusOverride, mode = "qr") {
   document.getElementById("pick-card").classList.add("hidden");
   els.progressCard.classList.add("hidden");
   els.resultCard.classList.remove("hidden");
@@ -297,13 +324,19 @@ function showResult(transferId, key, expiresIn, statusOverride) {
       : "https://lynkshare.app";
   const link = buildSendLink(base, transferId, key, currentAccessToken);
 
-  if (typeof window.qrcode === "function") {
-    const qr = window.qrcode(0, "M");
-    qr.addData(link);
-    qr.make();
-    els.qrHolder.innerHTML = qr.createSvgTag({ cellSize: 4, margin: 0 });
+  if (mode === "qr") {
+    if (typeof window.qrcode === "function") {
+      const qr = window.qrcode(0, "M");
+      qr.addData(link);
+      qr.make();
+      els.qrHolder.innerHTML = qr.createSvgTag({ cellSize: 4, margin: 0 });
+    } else {
+      els.qrHolder.innerHTML = `<p class="text-muted" style="color:#000; padding:10px;">QR generator unavailable</p>`;
+    }
   } else {
-    els.qrHolder.innerHTML = `<p class="text-muted" style="color:#000; padding:10px;">QR generator unavailable</p>`;
+    // The receiver already has the transfer, so a QR code would only be
+    // noise: it is the very link the phone is already holding.
+    els.qrHolder.innerHTML = `<p class="text-muted" style="color:#000; padding:10px;">Sent to the connected phone.</p>`;
   }
 
   // Kept out of the DOM on purpose: see `currentLink`.

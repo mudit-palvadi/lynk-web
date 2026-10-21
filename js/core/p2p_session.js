@@ -71,7 +71,7 @@ export function receiveViaP2p({ apiBase, transferId, aesKey, onStatus, onFileSav
   };
 
   const coordinator = new P2pCoordinator({
-    timeoutMs: 8000,
+    timeoutMs: 30000,
     onP2PFailed: () => fail("timeout"),
     actions: {
       async handleRemoteDescription(message) {
@@ -150,6 +150,8 @@ export function sendViaP2p({ apiBase, sessionId, files, onStatus }) {
     let channel;
     let settled = false;
     let sending = false;
+    let channelOpen = false;
+    let framesSent = false;
 
     const finish = (delivered) => {
       if (settled) return;
@@ -167,6 +169,15 @@ export function sendViaP2p({ apiBase, sessionId, files, onStatus }) {
     };
 
     const fail = (reason) => {
+      // Once the file frames are on the wire the receiver has the file, so a
+      // late failure must not turn a delivered transfer into a cloud
+      // fallback. The signaling socket and the closing "done" frame are only
+      // needed for the handshake.
+      if (framesSent) {
+        onStatus?.("p2p-delivered");
+        finish(true);
+        return;
+      }
       onStatus?.(`p2p-failed:${reason}`);
       finish(false);
     };
@@ -189,7 +200,14 @@ export function sendViaP2p({ apiBase, sessionId, files, onStatus }) {
           await sender.sendAll(file.blob);
           channel.send(encodeEof({ name: file.name }));
         }
-        channel.send(encodeDone());
+        // The files are on the wire, so the receiver has them.
+        framesSent = true;
+        // The "done" frame only tells the receiver that nothing more is
+        // coming. If it cannot be sent the transfer is still delivered, so it
+        // must not fail the whole thing.
+        try {
+          channel.send(encodeDone());
+        } catch {}
         onStatus?.("p2p-delivered");
         finish(true);
       } catch {
@@ -198,7 +216,7 @@ export function sendViaP2p({ apiBase, sessionId, files, onStatus }) {
     };
 
   const coordinator = new P2pCoordinator({
-      timeoutMs: 8000,
+      timeoutMs: 30000,
       onP2PFailed: () => fail("timeout"),
       actions: {
         async createOffer() {
@@ -206,7 +224,9 @@ export function sendViaP2p({ apiBase, sessionId, files, onStatus }) {
           channel = pc.createDataChannel("fileTransfer");
           channel.binaryType = "arraybuffer";
           channel.onopen = () => {
+            channelOpen = true;
             coordinator.notifyConnected();
+            onStatus?.("p2p-connected");
             sendFrames();
           };
           channel.onerror = () => {
@@ -262,7 +282,9 @@ export function sendViaP2p({ apiBase, sessionId, files, onStatus }) {
       coordinator.handleMessage(parseMessage(event.data));
     };
     ws.onerror = () => {
-      if (!settled) fail("websocket");
+      // The signaling socket is only needed for the handshake. Once the data
+      // channel is open, an error on it says nothing about the transfer.
+      if (!settled && !channelOpen) fail("websocket");
     };
     ws.onopen = () => {
       coordinator.start({ role: "sender" });

@@ -1,4 +1,7 @@
-const DEFAULT_TIMEOUT_MS = 8000;
+// The handshake budget. A phone that opens the app from a QR code is
+// cold-starting, so eight seconds is not enough for it to answer the offer
+// and trade connection candidates over a mobile network.
+const DEFAULT_TIMEOUT_MS = 30000;
 
 export class P2pCoordinator {
   #actions;

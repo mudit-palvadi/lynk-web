@@ -54,7 +54,7 @@ test("null candidate and error messages are ignored safely", async () => {
   assert.equal(actions.calls.sent.length, 0);
 });
 
-test("timeout fires onP2PFailed exactly once after 8 seconds", () => {
+test("timeout fires onP2PFailed exactly once after 30 seconds", () => {
   mock.timers.enable({ apis: ["setTimeout"] });
   try {
     const actions = fakeActions();
@@ -67,7 +67,7 @@ test("timeout fires onP2PFailed exactly once after 8 seconds", () => {
     });
     coordinator.start({ role: "receiver" });
 
-    mock.timers.tick(7999);
+    mock.timers.tick(29999);
     assert.equal(failures, 0);
     assert.equal(coordinator.hasFailed, false);
 
