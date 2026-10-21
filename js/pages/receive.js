@@ -83,7 +83,7 @@ async function loadTransfer() {
     if (err instanceof TransferNotFoundError) {
       setStatus("Transfer not found or expired. Ask the sender for a fresh QR code.", "error");
     } else {
-      setStatus("Could not reach the Lynk server. Check your connection.", "error");
+      setStatus("Could not reach the LynkShare server. Check your connection.", "error");
     }
     return;
   }
@@ -301,7 +301,7 @@ function adoptLink(url) {
   state.accessToken = parsed.accessToken;
 
   if (!state.transferId) {
-    setStatus("Paste a full Lynk link (it looks like https://lynkshare.app/send/…#key).", "error");
+    setStatus("Paste a full LynkShare link (it looks like https://lynkshare.app/send/…#key).", "error");
     return;
   }
   if (!state.aesKey) {
@@ -371,7 +371,7 @@ async function startPairing() {
     qr.make();
     qrHolder.innerHTML = qr.createSvgTag({ cellSize: 4, margin: 0 });
     qrHolder.classList.remove("hidden");
-    setStatus("Scan this QR from the Lynk app on your phone.");
+    setStatus("Scan this QR from the LynkShare app on your phone.");
 
     state.pairing = {
       sessionId: session.sessionId,

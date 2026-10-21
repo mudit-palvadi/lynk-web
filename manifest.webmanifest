@@ -1,6 +1,6 @@
 {
-  "name": "Lynk — Private, instant file sharing",
-  "short_name": "Lynk",
+  "name": "LynkShare — Private, instant file sharing",
+  "short_name": "LynkShare",
   "description": "End-to-end encrypted file sharing. No accounts. Scan, send, done.",
   "start_url": "/",
   "display": "standalone",

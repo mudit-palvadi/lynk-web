@@ -1,4 +1,4 @@
-"""Lynk website dev server (stdlib only, no backend changes).
+"""LynkShare website dev server (stdlib only, no backend changes).
 
 Serves `web/` as the site root and rewrites deep-link paths
 (`/send/{transfer_id}`) to the receiver page so local testing matches
@@ -46,7 +46,7 @@ class LynkRequestHandler(http.server.SimpleHTTPRequestHandler):
 def main():
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 8080
     server = http.server.ThreadingHTTPServer(("", port), LynkRequestHandler)
-    print(f"Lynk web dev server -> http://localhost:{port}")
+    print(f"LynkShare web dev server -> http://localhost:{port}")
     print(f"Deep links:          http://localhost:{port}/send/<transfer-id>")
     try:
         server.serve_forever()

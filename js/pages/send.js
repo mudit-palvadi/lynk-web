@@ -399,7 +399,7 @@ document.getElementById("scan-pair-button").addEventListener("click", async () =
     if (!parsed.sessionId || !parsed.publicKeyB64) {
       scanStatus.textContent = "";
       document.getElementById("pair-state").textContent =
-        "QR code was not a valid Lynk receiver code.";
+        "QR code was not a valid LynkShare receiver code.";
       return;
     }
     pendingPair = parsed;
