@@ -1,0 +1,39 @@
+name: CI
+
+# Every push to main and every pull request runs the test suite. This workflow
+# is the merge gate: a change that breaks the website must not reach main, so
+# nothing here is allowed to continue on error.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# A new push supersedes an in-flight run for the same ref.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# The workflow only needs to read the repository.
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Test
+        # The suite has no dependencies to install: it is plain ES modules run
+        # by the built-in node test runner.
+        run: node --test
