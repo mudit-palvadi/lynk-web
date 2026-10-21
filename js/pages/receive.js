@@ -9,6 +9,11 @@ import {
 } from "../core/key_wrap.js";
 import { isP2pSupported, receiveViaP2p } from "../core/p2p_session.js";
 import { HistoryStore } from "../core/history_store.js";
+import {
+  isNotReadyError,
+  TransferStillUploadingError,
+  waitForTransferReady,
+} from "../core/ready_wait.js";
 
 const historyStore = new HistoryStore();
 
@@ -91,7 +96,11 @@ async function loadTransfer() {
       ? formatBytes(files[0].file_size)
       : `${names} — ${formatBytes(state.metadata.total_size)} total`;
 
-  setStatus("Ready to download.");
+  setStatus(
+    state.metadata.status === "ready"
+      ? "Ready to download."
+      : "The sender is still uploading. Press Download to wait for it.",
+  );
   els.downloadButton.classList.remove("hidden");
 }
 
@@ -145,6 +154,7 @@ async function startDownload() {
 function tryP2pReceive() {
   return new Promise((resolve) => {
     let settled = false;
+    let saved = false;
     const settle = (value) => {
       if (settled) return;
       settled = true;
@@ -164,8 +174,11 @@ function tryP2pReceive() {
             const fraction = info.expected ? info.received / info.expected : 0;
             setProgress(fraction * 0.9);
           }
-          if (event === "p2p-failed") {
-            setStatus("Direct transfer failed. The link may have expired — request a fresh one.", "error");
+          if (event === "p2p-failed" && !saved) {
+            // The direct connection did not work out, but the sender may
+            // still be perfectly fine. The cloud path is tried next, so this
+            // is not an error worth alarming the reader about.
+            setStatus("Direct transfer failed. Falling back to the server.");
           }
           return;
         }
@@ -178,6 +191,7 @@ function tryP2pReceive() {
         }
       },
       onFileSaved: (plaintext, name) => {
+        saved = true;
         saveBlob(plaintext, name);
         recordReceive(state.transferId, [name], plaintext.length, "completed (p2p)");
         setProgress(1, "Done");
@@ -196,7 +210,7 @@ async function downloadViaCloud() {
 
   try {
     const api = new LynkApi({ baseUrl: resolveApiBase() });
-    const downloads = await api.getDownloadUrls(state.transferId, state.accessToken);
+    const downloads = await fetchDownloadUrls(api);
     if (downloads.length === 0) throw new Error("no downloadable files");
 
     let completed = 0;
@@ -223,12 +237,61 @@ async function downloadViaCloud() {
       "completed (cloud)",
     );
     setStatus("Saved! Check your browser downloads.", "success");
-  } catch {
-    setStatus("Download failed. The link may have expired — request a fresh one.", "error");
+  } catch (err) {
+    setStatus(describeDownloadFailure(err), "error");
     setProgress(0, "");
   } finally {
     els.downloadButton.disabled = false;
   }
+}
+
+/**
+ * Asks the server for the file links, waiting for the sender when it is not
+ * ready yet.
+ *
+ * The sender shows its QR code before it uploads anything, so a receiver that
+ * asks straight away is told the transfer is not ready. That is a temporary
+ * state and the wait is the right answer, so the receiver keeps asking until
+ * the sender is done.
+ */
+async function fetchDownloadUrls(api) {
+  try {
+    return await api.getDownloadUrls(state.transferId, state.accessToken);
+  } catch (err) {
+    if (!isNotReadyError(err)) throw err;
+
+    setStatus("The sender is still uploading…");
+    setProgress(0, "Waiting for the sender");
+
+    const metadata = await waitForTransferReady({
+      api,
+      transferId: state.transferId,
+      accessToken: state.accessToken,
+      onWait: () => {
+        setStatus("The sender is still uploading…");
+        setProgress(0, "Waiting for the sender");
+      },
+    });
+    state.metadata = metadata;
+
+    return api.getDownloadUrls(state.transferId, state.accessToken);
+  }
+}
+
+/**
+ * Says what went wrong without blaming the link for something it is not.
+ *
+ * A transfer that is not ready yet is a sender that is still working, not an
+ * expired link.
+ */
+function describeDownloadFailure(err) {
+  if (err instanceof TransferStillUploadingError || isNotReadyError(err)) {
+    return "The sender is still uploading. Wait a moment and try again.";
+  }
+  if (err instanceof TransferNotFoundError) {
+    return "Transfer not found or expired. Ask the sender for a fresh QR code.";
+  }
+  return "Download failed. Check your connection, or ask the sender for a fresh QR code.";
 }
 
 function adoptLink(url) {
