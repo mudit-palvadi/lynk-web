@@ -96,4 +96,8 @@ test("the security headers are set, and scripts stay strict", () => {
   assert.ok(csp.includes("pagead2.googlesyndication.com"), "the ad loader is blocked");
   assert.ok(csp.includes("object-src 'none'"));
   assert.ok(csp.includes("frame-ancestors 'none'"));
+  assert.ok(
+    csp.includes("static.cloudflareinsights.com"),
+    "Cloudflare's analytics beacon would be blocked",
+  );
 });

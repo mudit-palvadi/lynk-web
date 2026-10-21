@@ -1,12 +1,13 @@
 import { resolveClientId, isAdsEnabled, buildBannerAttributes } from "./core/ads_config.js";
 
 function loadScript(clientId) {
-  if (document.querySelector(`script[src*="adsbygoogle"][data-client="${clientId}"]`)) return;
+  if (document.querySelector(`script[src*="adsbygoogle.js?client=${encodeURIComponent(clientId)}"]`)) return;
   const script = document.createElement("script");
   script.async = true;
   script.src = `https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${encodeURIComponent(clientId)}`;
   script.crossOrigin = "anonymous";
-  script.dataset.client = clientId;
+  // No data-client attribute: Google's loader warns that it does not support
+  // one, and the client id is already in the script's query string.
   document.head.appendChild(script);
 }
 
