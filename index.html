@@ -43,7 +43,7 @@
   }
   </script>
 
-  <meta name="lynk-adsense-client" content="" />
+  <meta name="lynk-adsense-client" content="ca-pub-8309071856133612" />
   <link rel="manifest" href="/manifest.webmanifest" />
   <meta name="theme-color" content="#09090b" />
   <link rel="icon" type="image/png" sizes="192x192" href="/assets/icons/icon-192.png" />
@@ -75,6 +75,8 @@
         </div>
       </section>
 
+      <div data-ad-banner="1181594347" style="margin: 24px 0;"></div>
+
       <section class="feature-grid">
         <div class="feature-card">
           <h3>Client-Side AES-256</h3>
@@ -94,6 +96,8 @@
         </div>
       </section>
 
+      <div data-ad-banner="9826196119" style="margin: 24px 0;"></div>
+
       <section class="card" style="margin-top: 24px;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
           <h3 style="font-size: 1.05rem;">Recent Activity</h3>
@@ -104,7 +108,26 @@
         <div id="history-list"></div>
       </section>
 
-      <div data-ad-banner="" style="margin: 24px 0;"></div>
+      <section class="card" style="margin-top: 24px;">
+        <div class="card-header">
+          <h3 class="card-title">Prefer the app?</h3>
+        </div>
+        <p class="text-muted" style="margin-top: 4px;">
+          LynkShare for Android has fewer ads, a cleaner interface and larger
+          transfers. No account and no sign-up. Install it and share.
+        </p>
+        <a
+          class="btn btn-primary"
+          style="margin-top: 14px;"
+          href="https://play.google.com/store/apps/details?id=app.xynix.lynk"
+          target="_blank"
+          rel="noopener"
+        >
+          Get LynkShare for Android
+        </a>
+      </section>
+
+      <div data-ad-banner="8868512670" style="margin: 24px 0;"></div>
     </main>
 
     <footer class="footer">
@@ -119,17 +142,6 @@
   </div>
 
   <script type="module" src="/js/mount_ads.js"></script>
-  <script type="module">
-    import { renderHistory } from "/js/pages/history_view.js";
-    import { HistoryStore } from "/js/core/history_store.js";
-
-    const container = document.getElementById("history-list");
-    const store = new HistoryStore();
-    renderHistory(container, store);
-    document.getElementById("history-clear").addEventListener("click", () => {
-      store.clear();
-      renderHistory(container, store);
-    });
-  </script>
+  <script type="module" src="/js/pages/index.js"></script>
 </body>
 </html>

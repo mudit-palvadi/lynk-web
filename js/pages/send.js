@@ -23,7 +23,6 @@ const els = {
   progressLabel: document.getElementById("progress-label"),
   resultCard: document.getElementById("result-card"),
   qrHolder: document.getElementById("qr-holder"),
-  linkBox: document.getElementById("link-box"),
   copyButton: document.getElementById("copy-button"),
   extendButton: document.getElementById("extend-button"),
   resultStatus: document.getElementById("result-status"),
@@ -34,6 +33,15 @@ const historyStore = new HistoryStore();
 let selectedFiles = [];
 let currentTransferId = null;
 let currentSenderSecret = null;
+
+// The share link, kept in memory only.
+//
+// The link carries the AES key and the access token, so it is never written
+// into the page: this page loads a third-party ad script, and anything in
+// the DOM can be read by it. The QR code is the only rendering of the link
+// the page produces, and the copy button hands the link straight to the
+// clipboard.
+let currentLink = null;
 let currentAccessToken = null;
 let pendingPair = null;
 let cancelScan = null;
@@ -298,7 +306,8 @@ function showResult(transferId, key, expiresIn, statusOverride) {
     els.qrHolder.innerHTML = `<p class="text-muted" style="color:#000; padding:10px;">QR generator unavailable</p>`;
   }
 
-  els.linkBox.textContent = link;
+  // Kept out of the DOM on purpose: see `currentLink`.
+  currentLink = link;
 
   if (statusOverride) {
     setResultStatus(statusOverride);
@@ -410,8 +419,9 @@ document.getElementById("scan-cancel-button").addEventListener("click", () => {
 });
 
 els.copyButton.addEventListener("click", async () => {
+  if (!currentLink) return;
   try {
-    await navigator.clipboard.writeText(els.linkBox.textContent);
+    await navigator.clipboard.writeText(currentLink);
     const origText = els.copyButton.textContent;
     els.copyButton.textContent = "Copied";
     setResultStatus("Link copied to clipboard.", "success");
@@ -419,12 +429,10 @@ els.copyButton.addEventListener("click", async () => {
       els.copyButton.textContent = origText;
     }, 2500);
   } catch {
-    const range = document.createRange();
-    range.selectNodeContents(els.linkBox);
-    const selection = window.getSelection();
-    selection.removeAllRanges();
-    selection.addRange(range);
-    setResultStatus("Press Ctrl/Cmd+C to copy link.", "warn");
+    // The link is never in the DOM, so it cannot be selected by hand. A
+    // prompt shows it to the user without putting it back on the page.
+    window.prompt("Copy this link:", currentLink);
+    setResultStatus("Copy the link from the box above.", "warn");
   }
 });
 
