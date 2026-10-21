@@ -100,4 +100,8 @@ test("the security headers are set, and scripts stay strict", () => {
     csp.includes("static.cloudflareinsights.com"),
     "Cloudflare's analytics beacon would be blocked",
   );
+  assert.ok(
+    /script-src[^;]*adtrafficquality\.google/.test(csp),
+    "the ad loader's audience matcher would be blocked",
+  );
 });
