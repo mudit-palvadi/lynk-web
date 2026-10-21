@@ -68,16 +68,28 @@ test("the send page never puts the share link in the DOM", () => {
   assert.ok(!send.includes('id="link-box"'), "the link is still rendered");
 });
 
-test("the receiver page loads no third-party script at all", () => {
-  assert.ok(!receive.includes("googlesyndication"), "ad script referenced");
-  assert.ok(!receive.includes("adsbygoogle"), "ad markup referenced");
-  assert.ok(!receive.includes("data-ad-banner"), "ad slot referenced");
-  assert.ok(!receive.includes("mount_ads"), "the ad loader is still loaded");
-  assert.ok(!receive.includes(PUBLISHER), "publisher id present");
-  assert.ok(
-    receive.includes('<meta name="lynk-adsense-client" content="" />'),
-    "the publisher id must stay empty here",
-  );
+test("the receiver page carries one ad unit", () => {
+  assert.ok(receive.includes(`content="${PUBLISHER}"`));
+  const units = [...receive.matchAll(/data-ad-banner="([^"]*)"/g)].map((m) => m[1]);
+  assert.deepEqual(units, [SEND_SLOT], "the receiver page should have one unit");
+  assert.ok(receive.includes("/js/mount_ads.js"));
+});
+
+test("the receiver page loads the ad loader after the page script", () => {
+  // The page script takes the key out of the address bar. Module scripts run
+  // in document order, so the ad loader has to come after it, or Google would
+  // be asked for anything while the key was still in the URL.
+  const pageScript = receive.indexOf("/js/pages/receive.js");
+  const adLoader = receive.indexOf("/js/mount_ads.js");
+
+  assert.ok(pageScript >= 0, "the page script is missing");
+  assert.ok(adLoader > pageScript, "the ad loader must run last");
+});
+
+test("the receiver page keeps the key out of the DOM", () => {
+  const page = read("js/pages/receive.js");
+  assert.ok(page.includes('els.pasteInput.value = ""'), "the pasted link is not cleared");
+  assert.ok(page.includes("stashLink("), "the key is not taken out of the address bar");
 });
 
 test("the security headers are set, and scripts stay strict", () => {

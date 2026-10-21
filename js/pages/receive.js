@@ -1,4 +1,9 @@
 import { parseSendLink, parseReceiverQrLink } from "../core/link_parser.js";
+import {
+  clearStashedLink,
+  peekStashedLink,
+  stashLink,
+} from "../core/link_vault.js";
 import { safeFileName } from "../core/file_names.js";
 import { resolveApiBase } from "../core/config.js";
 import { LynkApi, TransferNotFoundError } from "../core/api.js";
@@ -237,6 +242,8 @@ async function downloadViaCloud() {
       "completed (cloud)",
     );
     setStatus("Saved! Check your browser downloads.", "success");
+    // The transfer is done, so the key is not needed any more.
+    clearStashedLink();
   } catch (err) {
     setStatus(describeDownloadFailure(err), "error");
     setProgress(0, "");
@@ -311,11 +318,18 @@ function adoptLink(url) {
 
   const clean = new URL(window.location.href);
   clean.pathname = `/send/${encodeURIComponent(state.transferId)}`;
-  clean.hash = state.accessToken
-    ? `#${state.aesKey}&a=${state.accessToken}`
-    : `#${state.aesKey}`;
+  clean.hash = "";
   clean.searchParams.delete("url");
   window.history.replaceState(null, "", clean);
+
+  // Take the key out of the address bar and out of the paste box, so that
+  // the ad script on this page cannot read it, and keep it for a reload.
+  stashLink({
+    transferId: state.transferId,
+    aesKey: state.aesKey,
+    accessToken: state.accessToken,
+  });
+  els.pasteInput.value = "";
 
   loadTransfer();
 }
@@ -337,10 +351,24 @@ els.pasteInput.addEventListener("keydown", (event) => {
 });
 
 const direct = parseSendLink(new URL(window.location.href));
+const stashed = direct.transferId && !direct.aesKey ? peekStashedLink() : null;
 if (direct.transferId && direct.aesKey) {
   state.transferId = direct.transferId;
   state.aesKey = direct.aesKey;
   state.accessToken = direct.accessToken;
+  // The fragment has served its purpose. Remove it from the address bar so
+  // that it cannot travel with an ad request, and keep the key in this tab.
+  stashLink({
+    transferId: state.transferId,
+    aesKey: state.aesKey,
+    accessToken: state.accessToken,
+  });
+  loadTransfer();
+} else if (stashed && stashed.transferId === direct.transferId) {
+  // A reload: the fragment is gone, but the key is still in this tab.
+  state.transferId = stashed.transferId;
+  state.aesKey = stashed.aesKey;
+  state.accessToken = stashed.accessToken ?? "";
   loadTransfer();
 } else if (direct.transferId && !direct.aesKey) {
   setStatus("This link is missing its decryption key (#fragment). Use the original QR link.", "error");
@@ -417,6 +445,11 @@ function pollAttached(api, pairButton) {
         state.transferId = session.transferId;
         state.aesKey = delivery.aesKey;
         state.accessToken = delivery.accessToken;
+        stashLink({
+          transferId: state.transferId,
+          aesKey: state.aesKey,
+          accessToken: state.accessToken,
+        });
         state.pairing = null;
         document.getElementById("paste-section").classList.add("hidden");
         loadTransfer();

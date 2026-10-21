@@ -39,7 +39,7 @@
   </script>
 
   <meta name="lynk-api-base" content="https://api.lynkshare.app" />
-  <meta name="lynk-adsense-client" content="" />
+  <meta name="lynk-adsense-client" content="ca-pub-8309071856133612" />
   <link rel="manifest" href="/manifest.webmanifest" />
   <meta name="theme-color" content="#09090b" />
   <link rel="icon" type="image/png" sizes="192x192" href="/assets/icons/icon-192.png" />
@@ -105,6 +105,7 @@
 
       <div id="status" class="status-pill" style="margin-top: 16px;"></div>
 
+      <div data-ad-banner="7200032777" style="margin-top: 28px;"></div>
     </main>
 
     <footer class="footer">
@@ -120,5 +121,12 @@
 
   <script src="/js/lib/qrcode.js"></script>
   <script type="module" src="/js/pages/receive.js"></script>
+  <!--
+    The ad loader runs after the page script, so the transfer key has already
+    been taken out of the address bar by the time Google is asked for anything.
+    This unit is shared with the send page for now: the AdSense console will
+    not open new units while the account is still waiting for its review.
+  -->
+  <script type="module" src="/js/mount_ads.js"></script>
 </body>
 </html>
