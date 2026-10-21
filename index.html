@@ -44,6 +44,13 @@
   </script>
 
   <meta name="lynk-adsense-client" content="ca-pub-8309071856133612" />
+  <!--
+    The AdSense loader, exactly as Google's own snippet has it. It has to be
+    in the served HTML: the site-ownership check fetches the page and looks
+    for this script, so a script that is only added by JavaScript cannot be
+    found and the site cannot be verified.
+  -->
+  <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-8309071856133612" crossorigin="anonymous"></script>
   <link rel="manifest" href="/manifest.webmanifest" />
   <meta name="theme-color" content="#09090b" />
   <link rel="icon" type="image/png" sizes="192x192" href="/assets/icons/icon-192.png" />

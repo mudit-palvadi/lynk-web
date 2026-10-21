@@ -26,6 +26,18 @@ test("ads.txt declares the publisher for the ad server", () => {
   assert.match(adsTxt, /^google\.com, pub-8309071856133612, DIRECT, [0-9a-f]+$/m);
 });
 
+test("the pages carry Google's ad script in the served HTML", () => {
+  // The site-ownership check fetches the page and looks for this script, so
+  // a loader that is only added by JavaScript cannot be found and the site
+  // cannot be verified.
+  const snippet =
+    "https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-8309071856133612";
+
+  for (const page of ["index.html", "app/send.html", "app/receive.html"]) {
+    assert.ok(read(page).includes(snippet), `${page} has no ad script in its HTML`);
+  }
+});
+
 test("the landing page loads the ad script and every landing unit", () => {
   assert.ok(index.includes(`content="${PUBLISHER}"`), "publisher id missing");
   for (const slot of LANDING_SLOTS) {
