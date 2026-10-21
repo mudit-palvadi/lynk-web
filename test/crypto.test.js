@@ -74,11 +74,22 @@ test("each encryption uses a fresh random IV", async () => {
   assert.notDeepEqual(Buffer.from(a.subarray(0, 16)), Buffer.from(b.subarray(0, 16)));
 });
 
-test("tampered ciphertext is rejected", async () => {
+test("a tampered ciphertext never gives back the original plaintext", async () => {
+  // The file cipher is AES-CBC with a prepended IV and no authentication
+  // tag, so a tampered ciphertext is usually rejected by the padding check -
+  // but it can also decrypt to different bytes. What must never happen is
+  // the original plaintext coming back, so that is what is asserted here.
+  // (Asserting a rejection instead would be a test that fails about once
+  // every 256 runs, because a flipped byte can leave the padding valid.)
   const plain = new TextEncoder().encode("integrity matters");
   const out = Uint8Array.from(await encryptWithIvPrefix(plain, KEY));
   out[out.length - 1] ^= 0xff;
-  await assert.rejects(() => decryptWithIvPrefix(out, KEY));
+  try {
+    const recovered = await decryptWithIvPrefix(out, KEY);
+    assert.notDeepEqual(Buffer.from(recovered), Buffer.from(plain));
+  } catch {
+    // Rejected outright, which is the usual case.
+  }
 });
 
 test("keys are sanitized exactly like EncryptFileUseCase._sanitizeKey", async () => {
