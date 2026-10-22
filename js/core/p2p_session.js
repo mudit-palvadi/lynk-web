@@ -44,7 +44,14 @@ export function receiveViaP2p({ apiBase, transferId, aesKey, onStatus, onFileSav
 
   const handleBinaryChunk = async (data) => {
     if (!activeFile) return;
-    activeFile.collector.add(new Uint8Array(data));
+    try {
+      activeFile.collector.add(new Uint8Array(data));
+    } catch (err) {
+      // The peer sent more than it declared: stop the transfer instead of
+      // taking whatever it keeps sending.
+      fail(err?.message ?? "size");
+      return;
+    }
     onStatus?.("p2p-progress", {
       received: activeFile.collector.receivedBytes,
       expected: activeFile.size,
@@ -63,7 +70,11 @@ export function receiveViaP2p({ apiBase, transferId, aesKey, onStatus, onFileSav
     const frame = parseText(raw);
     if (!frame) return;
     if (frame.kind === "header" && !activeFile) {
-      activeFile = { name: frame.name, size: frame.size, collector: new ChunkCollector() };
+      activeFile = {
+        name: frame.name,
+        size: frame.size,
+        collector: new ChunkCollector({ expectedBytes: frame.size }),
+      };
       onStatus?.("p2p-header", { name: frame.name, size: frame.size });
     } else if (frame.kind === "eof" && activeFile && frame.name === activeFile.name) {
       await finishActiveFile();
