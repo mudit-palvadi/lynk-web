@@ -205,8 +205,10 @@ async function uploadEncrypted(encrypted, key, created = null) {
   }
   setProgress(1, "Upload complete");
 
+  let paired = false;
   if (pendingPair) {
     await deliverToPairedPhone(encrypted, key);
+    paired = true;
   }
   recordSend("completed (cloud)");
   // The QR is only useful to a receiver that does not have the transfer yet.
@@ -214,7 +216,7 @@ async function uploadEncrypted(encrypted, key, created = null) {
     session.transferId,
     key,
     session.expiresIn,
-    undefined,
+    paired ? "Sent to the paired phone." : undefined,
     phoneIsReady ? "sent" : "qr",
   );
 }
@@ -336,7 +338,7 @@ function showResult(transferId, key, expiresIn, statusOverride, mode = "qr") {
   } else {
     // The receiver already has the transfer, so a QR code would only be
     // noise: it is the very link the phone is already holding.
-    els.qrHolder.innerHTML = `<p class="text-muted" style="color:#000; padding:10px;">Sent to the connected phone.</p>`;
+    els.qrHolder.innerHTML = `<p class="text-muted" style="color:#000; padding:10px;">Sent to the phone.</p>`;
   }
 
   // Kept out of the DOM on purpose: see `currentLink`.
@@ -436,6 +438,9 @@ document.getElementById("scan-pair-button").addEventListener("click", async () =
       return;
     }
     pendingPair = parsed;
+    // The phone is on the other end and already has the pairing session, so
+    // it does not need a QR code to find this transfer.
+    phoneIsReady = true;
     document.getElementById("pair-state").textContent =
       "Paired with phone — select Cloud Session to send.";
   } catch (err) {
