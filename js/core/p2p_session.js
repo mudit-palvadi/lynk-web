@@ -15,6 +15,13 @@ export function toWebSocketUrl(apiBase, transferId) {
   return `${apiBase.replace(/^http/, "ws")}/ws/signaling/${encodeURIComponent(transferId)}`;
 }
 
+// The signaling room only lets a socket in after this frame (#32). It has to be
+// the first thing on the wire, before any offer or candidate.
+export function sendAuthFrame(ws, accessToken) {
+  if (!accessToken || ws.readyState !== WebSocket.OPEN) return;
+  ws.send(JSON.stringify({ type: "auth", token: accessToken }));
+}
+
 export function isP2pSupported() {
   return (
     typeof window !== "undefined" &&
@@ -23,7 +30,7 @@ export function isP2pSupported() {
   );
 }
 
-export function receiveViaP2p({ apiBase, transferId, aesKey, onStatus, onFileSaved }) {
+export function receiveViaP2p({ apiBase, transferId, aesKey, accessToken, onStatus, onFileSaved }) {
   let ws;
   let pc;
   let activeFile = null;
@@ -148,13 +155,14 @@ export function receiveViaP2p({ apiBase, transferId, aesKey, onStatus, onFileSav
     if (!coordinator.hasFailed) fail("websocket");
   };
   ws.onopen = () => {
+    sendAuthFrame(ws, accessToken);
     coordinator.start({ role: "receiver" });
   };
 
   return cleanup;
 }
 
-export function sendViaP2p({ apiBase, sessionId, files, onStatus }) {
+export function sendViaP2p({ apiBase, sessionId, files, accessToken, onStatus }) {
   return new Promise((resolve) => {
     let ws;
     let pc;
@@ -298,6 +306,7 @@ export function sendViaP2p({ apiBase, sessionId, files, onStatus }) {
       if (!settled && !channelOpen) fail("websocket");
     };
     ws.onopen = () => {
+      sendAuthFrame(ws, accessToken);
       coordinator.start({ role: "sender" });
     };
   });

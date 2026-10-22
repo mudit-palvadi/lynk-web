@@ -173,6 +173,7 @@ function tryP2pReceive() {
       apiBase: resolveApiBase(),
       transferId: state.transferId,
       aesKey: state.aesKey,
+      accessToken: state.accessToken,
       onStatus: (event, info) => {
         if (settled) {
           if (event === "p2p-progress") {
