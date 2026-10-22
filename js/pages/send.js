@@ -277,6 +277,7 @@ async function sendP2P() {
       sessionId: created.transferId,
       files: encrypted,
       accessToken: currentAccessToken,
+      aesKey: key,
       onStatus: (event, detail) => {
         if (event === "p2p-connected") {
           phoneIsReady = true;

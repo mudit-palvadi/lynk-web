@@ -1,8 +1,8 @@
 import { parseMessage, encodeOffer } from "./signaling.js";
-import { parseText, encodeHeader, encodeEof, encodeDone } from "./framer.js";
+import { parseText, encodeHeader, encodeEof, encodeDone, encodeHello } from "./framer.js";
 import { ChunkCollector } from "./chunk_collector.js";
 import { ChunkSender } from "./chunk_sender.js";
-import { decryptWithIvPrefix } from "./crypto.js";
+import { decryptWithIvPrefix, encryptWithIvPrefix } from "./crypto.js";
 import { P2pCoordinator } from "./p2p_coordinator.js";
 
 const ICE_SERVERS = [
@@ -20,6 +20,35 @@ export function toWebSocketUrl(apiBase, transferId) {
 export function sendAuthFrame(ws, accessToken) {
   if (!accessToken || ws.readyState !== WebSocket.OPEN) return;
   ws.send(JSON.stringify({ type: "auth", token: accessToken }));
+}
+
+function bytesToBase64(bytes) {
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary);
+}
+
+function base64ToBytes(text) {
+  const binary = atob(text);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
+// The data-channel header used to carry the file name in clear text (#32). A
+// peer that sends `hi` gets the name sealed with the transfer key instead.
+export async function sealName(name, aesKey) {
+  const packed = await encryptWithIvPrefix(new TextEncoder().encode(name), aesKey);
+  return bytesToBase64(packed);
+}
+
+export async function openName(token, aesKey) {
+  try {
+    const packed = base64ToBytes(token);
+    return new TextDecoder().decode(await decryptWithIvPrefix(packed, aesKey));
+  } catch {
+    return null;
+  }
 }
 
 export function isP2pSupported() {
@@ -77,14 +106,23 @@ export function receiveViaP2p({ apiBase, transferId, aesKey, accessToken, onStat
     const frame = parseText(raw);
     if (!frame) return;
     if (frame.kind === "header" && !activeFile) {
+      const name = frame.token ? await openName(frame.token, aesKey) : frame.name;
+      if (!name) {
+        fail("header");
+        return;
+      }
       activeFile = {
-        name: frame.name,
+        name,
+        token: frame.token ?? null,
         size: frame.size,
         collector: new ChunkCollector({ expectedBytes: frame.size }),
       };
-      onStatus?.("p2p-header", { name: frame.name, size: frame.size });
-    } else if (frame.kind === "eof" && activeFile && frame.name === activeFile.name) {
-      await finishActiveFile();
+      onStatus?.("p2p-header", { name, size: frame.size });
+    } else if (frame.kind === "eof" && activeFile) {
+      const matches = activeFile.token
+        ? frame.token === activeFile.token
+        : frame.name === activeFile.name;
+      if (matches) await finishActiveFile();
     }
   };
 
@@ -100,7 +138,13 @@ export function receiveViaP2p({ apiBase, transferId, aesKey, accessToken, onStat
           const channel = event.channel;
           if (channel.label !== "fileTransfer") return;
           channel.binaryType = "arraybuffer";
-          channel.onopen = () => coordinator.notifyConnected();
+          channel.onopen = () => {
+            // Tells the sender this side can read a sealed name (#32).
+            try {
+              channel.send(encodeHello());
+            } catch {}
+            coordinator.notifyConnected();
+          };
           channel.onmessage = (evt) => {
             if (typeof evt.data === "string") {
               handleTextFrame(evt.data);
@@ -162,7 +206,7 @@ export function receiveViaP2p({ apiBase, transferId, aesKey, accessToken, onStat
   return cleanup;
 }
 
-export function sendViaP2p({ apiBase, sessionId, files, accessToken, onStatus }) {
+export function sendViaP2p({ apiBase, sessionId, files, accessToken, aesKey, onStatus }) {
   return new Promise((resolve) => {
     let ws;
     let pc;
@@ -171,6 +215,10 @@ export function sendViaP2p({ apiBase, sessionId, files, accessToken, onStatus })
     let sending = false;
     let channelOpen = false;
     let framesSent = false;
+    let helloResolve;
+    const helloSeen = new Promise((resolve) => {
+      helloResolve = resolve;
+    });
 
     const finish = (delivered) => {
       if (settled) return;
@@ -205,6 +253,14 @@ export function sendViaP2p({ apiBase, sessionId, files, accessToken, onStatus })
       if (sending) return;
       sending = true;
       try {
+        // A peer that never says hello only understands the clear-text header;
+        // it gets two seconds, then the transfer goes ahead the old way.
+        const peerOpensNames = await Promise.race([
+          helloSeen,
+          new Promise((resolve) => setTimeout(() => resolve(false), 2000)),
+        ]);
+        const seal = peerOpensNames && aesKey ? (name) => sealName(name, aesKey) : () => null;
+
         const sender = new ChunkSender({
           bufferedAmount: () => channel.bufferedAmount,
           send: async (chunk) => {
@@ -214,10 +270,11 @@ export function sendViaP2p({ apiBase, sessionId, files, accessToken, onStatus })
         });
 
         for (const file of files) {
+          const token = await seal(file.name);
           onStatus?.("p2p-sending", { name: file.name });
-          channel.send(encodeHeader({ name: file.name, size: file.blob.length }));
+          channel.send(encodeHeader({ name: file.name, size: file.blob.length, token }));
           await sender.sendAll(file.blob);
-          channel.send(encodeEof({ name: file.name }));
+          channel.send(encodeEof({ name: file.name, token }));
         }
         // The files are on the wire, so the receiver has them.
         framesSent = true;
@@ -253,6 +310,11 @@ export function sendViaP2p({ apiBase, sessionId, files, accessToken, onStatus })
           };
           channel.onclose = () => {
             if (!settled && !sending) fail("closed");
+          };
+          channel.onmessage = (event) => {
+            if (typeof event.data !== "string") return;
+            const frame = parseText(event.data);
+            if (frame && frame.kind === "hello") helloResolve(true);
           };
           pc.onicecandidate = (event) => {
             if (!event.candidate || !ws || ws.readyState !== WebSocket.OPEN) return;
