@@ -13,9 +13,9 @@ import { fileURLToPath } from "node:url";
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const read = (relative) => readFileSync(join(root, relative), "utf8");
 
-const PUBLISHER = "ca-pub-8309071856133612";
-const LANDING_SLOTS = ["1181594347", "9826196119", "8868512670"];
-const SEND_SLOT = "7200032777";
+const PUBLISHER = "ca-pub-9472143004063972";
+const LANDING_SLOTS = ["6518797490", "5205715829", "5753132853"];
+const TRANSFER_SLOT = "7640307472";
 
 const index = read("index.html");
 const send = read("app/send.html");
@@ -23,7 +23,7 @@ const receive = read("app/receive.html");
 
 test("ads.txt declares the publisher for the ad server", () => {
   const adsTxt = read("ads.txt");
-  assert.match(adsTxt, /^google\.com, pub-8309071856133612, DIRECT, [0-9a-f]+$/m);
+  assert.match(adsTxt, /^google\.com, pub-9472143004063972, DIRECT, [0-9a-f]+$/m);
 });
 
 test("the pages carry Google's ad script in the served HTML", () => {
@@ -31,7 +31,7 @@ test("the pages carry Google's ad script in the served HTML", () => {
   // a loader that is only added by JavaScript cannot be found and the site
   // cannot be verified.
   const snippet =
-    "https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-8309071856133612";
+    "https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-9472143004063972";
 
   for (const page of ["index.html", "app/send.html", "app/receive.html"]) {
     assert.ok(read(page).includes(snippet), `${page} has no ad script in its HTML`);
@@ -70,7 +70,7 @@ test("the landing page has no inline script, so a strict CSP can stand", () => {
 
 test("the send page carries the ad unit and the publisher id", () => {
   assert.ok(send.includes(`content="${PUBLISHER}"`));
-  assert.ok(send.includes(`data-ad-banner="${SEND_SLOT}"`));
+  assert.ok(send.includes(`data-ad-banner="${TRANSFER_SLOT}"`));
   assert.ok(send.includes("/js/mount_ads.js"));
 });
 
@@ -83,7 +83,7 @@ test("the send page never puts the share link in the DOM", () => {
 test("the receiver page carries one ad unit", () => {
   assert.ok(receive.includes(`content="${PUBLISHER}"`));
   const units = [...receive.matchAll(/data-ad-banner="([^"]*)"/g)].map((m) => m[1]);
-  assert.deepEqual(units, [SEND_SLOT], "the receiver page should have one unit");
+  assert.deepEqual(units, [TRANSFER_SLOT], "the receiver page should have one unit");
   assert.ok(receive.includes("/js/mount_ads.js"));
 });
 
