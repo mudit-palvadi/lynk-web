@@ -4,6 +4,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import {
+  MAX_FILES,
   maxTotalSize,
   encryptedSize,
   validateSelection,
@@ -72,6 +73,19 @@ test("multiple files sum toward the limit using encrypted sizes", () => {
     false,
   );
   assert.equal(result.ok, false);
+});
+
+// The server accepts ten files per transfer, so the page must refuse the
+// eleventh before the user waits for an upload that would only fail there.
+test("ten small files pass and eleven are refused", () => {
+  const files = (count) =>
+    Array.from({ length: count }, (_, i) => ({ name: `f${i}`, size: 1024 }));
+
+  assert.equal(validateSelection(files(MAX_FILES), "cloud", false).ok, true);
+
+  const eleven = validateSelection(files(MAX_FILES + 1), "cloud", false);
+  assert.equal(eleven.ok, false);
+  assert.match(eleven.reason, /10 files/);
 });
 
 // The website has no rewarded-ad flow, so the unlocked tiers are unreachable

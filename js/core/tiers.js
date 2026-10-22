@@ -12,6 +12,12 @@ export function maxTotalSize(mode, unlocked) {
   return unlocked ? 20 * MB : 10 * MB;
 }
 
+// The server accepts at most ten files per transfer, and so does the app. The
+// site used to check only the byte budget, so eleven small files sailed past
+// every client check and died at create time with a server error instead of a
+// readable reason on the page.
+export const MAX_FILES = 10;
+
 export function encryptedSize(plainSize) {
   const paddedBlocks = (Math.floor(plainSize / 16) + 1) * 16;
   return paddedBlocks + 16;
@@ -27,6 +33,12 @@ export function validateSelection(files, mode, unlocked) {
     return {
       ok: false,
       reason: `Total exceeds the ${limit / MB} MB limit.`,
+    };
+  }
+  if (files.length > MAX_FILES) {
+    return {
+      ok: false,
+      reason: `Pick at most ${MAX_FILES} files per transfer.`,
     };
   }
   return { ok: true };
