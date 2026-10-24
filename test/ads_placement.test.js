@@ -128,4 +128,20 @@ test("the security headers are set, and scripts stay strict", () => {
     /script-src[^;]*adtrafficquality\.google/.test(csp),
     "the ad loader's audience matcher would be blocked",
   );
+  // AdSense draws the creative in a SafeFrame served from
+  // tpc.googlesyndication.com, and some creatives are framed from
+  // doubleclick. Without these, Chrome replaces the ad with "This content is
+  // blocked. Contact the site owner to fix the issue."
+  assert.ok(
+    /frame-src[^;]*\*\.googlesyndication\.com/.test(csp),
+    "AdSense's SafeFrame would be blocked by frame-src",
+  );
+  assert.ok(
+    /frame-src[^;]*\*\.doubleclick\.net/.test(csp),
+    "ad creatives framed from doubleclick would be blocked",
+  );
+  assert.ok(
+    /frame-src[^;]*\*\.google\.com/.test(csp),
+    "Google's ad frames would be blocked",
+  );
 });
