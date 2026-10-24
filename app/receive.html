@@ -86,6 +86,27 @@
           </button>
         </div>
 
+        <div style="margin-top: 20px; border-top: 1px solid var(--border); padding-top: 18px;">
+          <h3>Have a 6-digit code?</h3>
+          <p style="font-size: 0.88rem; margin-top: 4px;">
+            Type the code the sender shows next to their QR code — no link needed.
+          </p>
+          <div style="display: flex; gap: 10px; margin-top: 12px; flex-wrap: wrap;">
+            <input
+              id="code-input"
+              type="text"
+              inputmode="numeric"
+              autocomplete="one-time-code"
+              maxlength="6"
+              placeholder="123456"
+              style="flex: 1; min-width: 160px; letter-spacing: 0.35em; font-size: 1.2rem;"
+            />
+            <button id="code-button" class="btn btn-secondary">
+              Use Code
+            </button>
+          </div>
+        </div>
+
         <div style="margin-top: 24px; border-top: 1px solid var(--border); padding-top: 18px;">
           <h3>Pair with mobile app</h3>
           <p style="font-size: 0.88rem; margin-top: 4px;">

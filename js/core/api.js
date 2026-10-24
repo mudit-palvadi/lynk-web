@@ -114,8 +114,78 @@ export class LynkApi {
     };
   }
 
-  async attachTransfer(sessionId, transferId, wrappedKey) {
+  async joinSenderSession(code, receiverPk) {
+    const json = await this.request(`${this.baseUrl}/api/v1/sender-sessions/join`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code, receiver_pk: receiverPk }),
+    });
+    return {
+      sessionId: json.session_id,
+      status: json.status,
+      expiresIn: json.expires_in ?? 0,
+    };
+  }
+
+  /**
+   * The sender's wrapped key, or null while the sender has not attached it.
+   * A 409 is the normal "not yet" answer, not a failure.
+   */
+  async getSenderSessionKey(sessionId) {
+    try {
+      const json = await this.request(
+        `${this.baseUrl}/api/v1/sender-sessions/${encodeURIComponent(sessionId)}/key`,
+      );
+      return {
+        transferId: json.transfer_id,
+        wrappedKey: json.wrapped_key,
+        mode: json.mode ?? "cloud",
+      };
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 409) return null;
+      throw err;
+    }
+  }
+
+  async createSenderSession() {
+    const json = await this.request(`${this.baseUrl}/api/v1/sender-sessions`, {
+      method: "POST",
+    });
+    return {
+      sessionId: json.session_id,
+      code: json.code,
+      expiresIn: json.expires_in ?? 0,
+    };
+  }
+
+  async getSenderSession(sessionId) {
+    const json = await this.request(
+      `${this.baseUrl}/api/v1/sender-sessions/${encodeURIComponent(sessionId)}`,
+    );
+    return {
+      sessionId: json.session_id,
+      status: json.status,
+      receiverPk: json.receiver_pk ?? null,
+      expiresIn: json.expires_in ?? 0,
+    };
+  }
+
+  async attachSenderKey(sessionId, transferId, wrappedKey, mode) {
     return this.request(
+      `${this.baseUrl}/api/v1/sender-sessions/${encodeURIComponent(sessionId)}/attach`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          transfer_id: transferId,
+          wrapped_key: wrappedKey,
+          mode,
+        }),
+      },
+    );
+  }
+
+  async attachTransfer(sessionId, transferId, wrappedKey) {    return this.request(
       `${this.baseUrl}/api/v1/receiver-sessions/${encodeURIComponent(sessionId)}/attach-transfer`,
       {
         method: "POST",

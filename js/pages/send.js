@@ -43,6 +43,7 @@ let currentSenderSecret = null;
 // clipboard.
 let currentLink = null;
 let currentAccessToken = null;
+let senderCodeTransferId = null;
 let pendingPair = null;
 
 // Set once a phone is on the other end: connected over the direct channel,
@@ -218,6 +219,7 @@ async function uploadEncrypted(encrypted, key, created = null) {
     session.expiresIn,
     paired ? "Sent to the paired phone." : undefined,
     phoneIsReady ? "sent" : "qr",
+    "cloud",
   );
 }
 
@@ -269,6 +271,8 @@ async function sendP2P() {
       key,
       created.expiresIn,
       "Waiting for receiver to connect...",
+      "qr",
+      "p2p",
     );
     setResultStatus("Waiting for receiver — keep this tab open.", "warn");
 
@@ -317,7 +321,73 @@ async function sendP2P() {
   }
 }
 
-function showResult(transferId, key, expiresIn, statusOverride, mode = "qr") {
+/**
+ * Shows the six-digit code and hands the key over when someone types it.
+ *
+ * The code names a session the phone joins with its own ephemeral public key.
+ * The AES key (and the access token) are wrapped for that key here, so the
+ * server never sees either one.
+ */
+async function showSenderCode(transferId, key, transferMode) {
+  const codeEl = document.getElementById("sender-code");
+  const statusEl = document.getElementById("sender-code-status");
+  if (!codeEl || !statusEl) return;
+  if (senderCodeTransferId === transferId) return;
+
+  senderCodeTransferId = transferId;
+  clearInterval(window.__lynkSenderCodePoll);
+
+  try {
+    const api = new LynkApi({ baseUrl: resolveApiBase() });
+    const session = await api.createSenderSession();
+    codeEl.textContent = session.code;
+    statusEl.textContent = "Waiting for the receiver…";
+
+    let elapsed = 0;
+    window.__lynkSenderCodePoll = setInterval(async () => {
+      elapsed += 2;
+      if (elapsed > session.expiresIn) {
+        clearInterval(window.__lynkSenderCodePoll);
+        statusEl.textContent = "Code expired — send the link instead.";
+        return;
+      }
+      try {
+        const view = await api.getSenderSession(session.sessionId);
+        if (!view.receiverPk) return;
+        clearInterval(window.__lynkSenderCodePoll);
+        statusEl.textContent = "Receiver joined — handing over the key…";
+        const wrapped = await wrapKey({
+          aesKey: key,
+          accessToken: currentAccessToken,
+          receiverPublicKeyB64: view.receiverPk,
+          sessionId: session.sessionId,
+        });
+        await api.attachSenderKey(
+          session.sessionId,
+          transferId,
+          wrapped,
+          transferMode,
+        );
+        statusEl.textContent = "Receiver joined — files unlocked.";
+      } catch {
+        clearInterval(window.__lynkSenderCodePoll);
+        statusEl.textContent = "Code pairing failed — send the link instead.";
+      }
+    }, 2000);
+  } catch {
+    codeEl.textContent = "······";
+    statusEl.textContent = "Code pairing unavailable — send the link instead.";
+  }
+}
+
+function showResult(
+  transferId,
+  key,
+  expiresIn,
+  statusOverride,
+  mode = "qr",
+  transferMode = "cloud",
+) {
   document.getElementById("pick-card").classList.add("hidden");
   els.progressCard.classList.add("hidden");
   els.resultCard.classList.remove("hidden");
@@ -345,6 +415,9 @@ function showResult(transferId, key, expiresIn, statusOverride, mode = "qr") {
 
   // Kept out of the DOM on purpose: see `currentLink`.
   currentLink = link;
+
+  // The QR and the code are two ways into the same transfer.
+  if (mode === "qr") showSenderCode(transferId, key, transferMode);
 
   if (statusOverride) {
     setResultStatus(statusOverride);

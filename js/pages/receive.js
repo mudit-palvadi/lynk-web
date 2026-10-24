@@ -6,7 +6,7 @@ import {
 } from "../core/link_vault.js";
 import { safeFileName } from "../core/file_names.js";
 import { resolveApiBase } from "../core/config.js";
-import { LynkApi, TransferNotFoundError } from "../core/api.js";
+import { ApiError, LynkApi, TransferNotFoundError } from "../core/api.js";
 import { decryptWithIvPrefix } from "../core/crypto.js";
 import {
   generateReceiverKeyPair,
@@ -52,6 +52,8 @@ const state = {
   aesKey: "",
   accessToken: "",
   metadata: null,
+  // "cloud", "p2p", or "" while unknown (a plain link).
+  mode: "",
 };
 
 function setStatus(message, tone = "muted") {
@@ -150,7 +152,13 @@ function saveBlob(bytes, fileName) {
 async function startDownload() {
   els.downloadButton.disabled = true;
 
-  if (isP2pSupported() && (await tryP2pReceive())) {
+  // A cloud sender already uploaded, so waiting on a direct connection that
+  // is not coming would only delay the download.
+  if (
+    state.mode !== "cloud" &&
+    isP2pSupported() &&
+    (await tryP2pReceive())
+  ) {
     return;
   }
   await downloadViaCloud();
@@ -349,6 +357,91 @@ els.pasteButton.addEventListener("click", () => {
 
 els.pasteInput.addEventListener("keydown", (event) => {
   if (event.key === "Enter") els.pasteButton.click();
+});
+
+/**
+ * Receives by typing the code the sender shows.
+ *
+ * The code only names a session. The browser publishes an ephemeral public
+ * key for it and asks again and again until the sender has wrapped the
+ * transfer key for that key. Nothing secret is in the code itself.
+ */
+async function startCodeReceive() {
+  const input = document.getElementById("code-input");
+  const codeButton = document.getElementById("code-button");
+  const code = input.value.replace(/\D/g, "");
+  if (code.length !== 6) {
+    setStatus("Type the 6-digit code the sender shows.", "error");
+    return;
+  }
+
+  codeButton.disabled = true;
+  clearInterval(window.__lynkCodePoll);
+  setStatus("Checking the code…");
+
+  try {
+    if (typeof crypto.subtle === "undefined") throw new Error("no webcrypto");
+    const api = new LynkApi({ baseUrl: resolveApiBase() });
+    const receiver = await generateReceiverKeyPair();
+    const session = await api.joinSenderSession(code, receiver.publicKeyB64);
+    input.value = "";
+    setStatus("Waiting for the sender to share the key…");
+
+    let elapsed = 0;
+    window.__lynkCodePoll = setInterval(async () => {
+      elapsed += 2;
+      if (elapsed > session.expiresIn) {
+        clearInterval(window.__lynkCodePoll);
+        codeButton.disabled = false;
+        setStatus("That code expired. Ask the sender for a new one.", "error");
+        return;
+      }
+      try {
+        const key = await api.getSenderSessionKey(session.sessionId);
+        if (!key) return;
+        clearInterval(window.__lynkCodePoll);
+        const delivery = await unwrapDelivery({
+          wrappedBase64: key.wrappedKey,
+          privateKeySeed: receiver.privateKeySeed,
+          sessionId: session.sessionId,
+        });
+        state.transferId = key.transferId;
+        state.aesKey = delivery.aesKey;
+        state.accessToken = delivery.accessToken;
+        state.mode = key.mode;
+        stashLink({
+          transferId: state.transferId,
+          aesKey: state.aesKey,
+          accessToken: state.accessToken,
+        });
+        document.getElementById("paste-section").classList.add("hidden");
+        loadTransfer();
+      } catch (err) {
+        clearInterval(window.__lynkCodePoll);
+        codeButton.disabled = false;
+        setStatus(
+          "Could not pair with that code. Ask the sender for a new one.",
+          "error",
+        );
+      }
+    }, 2000);
+  } catch (err) {
+    codeButton.disabled = false;
+    if (err instanceof TransferNotFoundError) {
+      setStatus("That code is not valid or has expired.", "error");
+    } else if (err instanceof ApiError && err.status === 409) {
+      setStatus("That code is already paired with another device.", "error");
+    } else {
+      setStatus("Could not use that code. Check your connection.", "error");
+    }
+  }
+}
+
+document
+  .getElementById("code-button")
+  .addEventListener("click", () => startCodeReceive());
+document.getElementById("code-input").addEventListener("keydown", (event) => {
+  if (event.key === "Enter") startCodeReceive();
 });
 
 const direct = parseSendLink(new URL(window.location.href));
