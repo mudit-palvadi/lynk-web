@@ -428,12 +428,13 @@ document.getElementById("code-input").addEventListener("keydown", (event) => {
   if (event.key === "Enter") startCodeReceive();
 });
 
-const direct = parseSendLink(new URL(window.location.href));
+const initialLink = window.__lynkTakeInitialLink?.() ?? window.location.href;
+const direct = parseSendLink(new URL(initialLink));
 const stashed = direct.transferId && !direct.aesKey ? peekStashedLink() : null;
 if (direct.transferId && direct.aesKey) {
-  // adoptLink removes the fragment from the address bar before loading, so
-  // the key cannot travel with an ad request.
-  adoptLink(new URL(window.location.href));
+  // The head bootstrap has already scrubbed the address bar. adoptLink also
+  // scrubs links adopted later and keeps the parsed key for this transfer.
+  adoptLink(new URL(initialLink));
 } else if (stashed && stashed.transferId === direct.transferId) {
   // A reload: the fragment is gone, but the key is still in this tab.
   state.transferId = stashed.transferId;

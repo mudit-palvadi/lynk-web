@@ -88,3 +88,16 @@ test("storage that refuses to work does not break the page", () => {
   assert.equal(calls.length, 1);
   assert.equal(peekStashedLink(env), null);
 });
+
+test("a denied storage getter cannot prevent fragment removal or break cleanup", () => {
+  const { calls, env } = fakeEnv();
+  Object.defineProperty(env, "storage", {
+    get() { throw new Error("SecurityError: storage access denied"); },
+  });
+
+  assert.doesNotThrow(() => scrubFragment(env));
+  assert.doesNotThrow(() => stashLink({ transferId: "abc", aesKey: "thekey" }, env));
+  assert.equal(calls.length, 2);
+  assert.equal(peekStashedLink(env), null);
+  assert.doesNotThrow(() => clearStashedLink(env));
+});
