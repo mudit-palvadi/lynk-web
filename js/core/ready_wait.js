@@ -53,7 +53,8 @@ export async function waitForTransferReady({
   pollIntervalMs = DEFAULT_READY_POLL_INTERVAL_MS,
   onWait = () => {},
   sleep = defaultSleep,
-  now = () => Date.now(),
+  // Timeout budgets must not move when the system clock is corrected.
+  now = () => performance.now(),
 }) {
   const deadline = now() + timeoutMs;
 

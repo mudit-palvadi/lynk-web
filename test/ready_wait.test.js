@@ -108,6 +108,39 @@ test("waiting gives up with a clear message when the sender never finishes", asy
   );
 });
 
+for (const jump of [60_000, -60_000]) {
+  test(`the default timeout ignores a ${jump} ms system clock adjustment`, async (t) => {
+    let elapsed = 0;
+    let wallTime = 1_000_000;
+    let calls = 0;
+    t.mock.method(Date, "now", () => wallTime);
+    t.mock.method(performance, "now", () => elapsed);
+
+    await assert.rejects(
+      waitForTransferReady({
+        api: {
+          getTransferMetadata: async () => {
+            calls += 1;
+            // Bound the fake loop even when a backward jump breaks the deadline.
+            if (calls > 4) throw new Error("Timeout exceeded its elapsed-time budget");
+            return { status: "uploading" };
+          },
+        },
+        transferId: "t1",
+        timeoutMs: 2_000,
+        pollIntervalMs: 1_000,
+        sleep: async (ms) => {
+          elapsed += ms;
+          wallTime += ms + (elapsed === 1_000 ? jump : 0);
+        },
+      }),
+      TransferStillUploadingError,
+    );
+    assert.equal(elapsed, 2_000);
+    assert.equal(calls, 3);
+  });
+}
+
 test("a transfer that no longer exists is reported straight away", async () => {
   const clock = fakeClock();
   const api = {
