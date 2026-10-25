@@ -65,46 +65,28 @@
     </nav>
 
     <main>
-      <section id="paste-section" class="card">
+      <section id="receive-section" class="card">
         <div class="card-header">
           <span class="eyebrow">Direct Download</span>
           <h2>Receive Files</h2>
           <p style="margin-top: 6px;">
-            Paste a LynkShare transfer link or open a link scanned from a QR code.
+            Type the 6-digit code the sender shows next to their QR code — no link needed.
           </p>
         </div>
 
         <div style="display: flex; gap: 10px; margin-top: 18px; flex-wrap: wrap;">
           <input
-            id="paste-input"
-            type="url"
-            placeholder="https://lynkshare.app/send/…#key"
-            style="flex: 1; min-width: 220px;"
+            id="code-input"
+            type="text"
+            inputmode="numeric"
+            autocomplete="one-time-code"
+            maxlength="6"
+            placeholder="123456"
+            style="flex: 1; min-width: 160px; letter-spacing: 0.35em; font-size: 1.2rem;"
           />
-          <button id="paste-button" class="btn btn-primary">
-            Fetch &amp; Decrypt
+          <button id="code-button" class="btn btn-primary">
+            Use Code
           </button>
-        </div>
-
-        <div style="margin-top: 20px; border-top: 1px solid var(--border); padding-top: 18px;">
-          <h3>Have a 6-digit code?</h3>
-          <p style="font-size: 0.88rem; margin-top: 4px;">
-            Type the code the sender shows next to their QR code — no link needed.
-          </p>
-          <div style="display: flex; gap: 10px; margin-top: 12px; flex-wrap: wrap;">
-            <input
-              id="code-input"
-              type="text"
-              inputmode="numeric"
-              autocomplete="one-time-code"
-              maxlength="6"
-              placeholder="123456"
-              style="flex: 1; min-width: 160px; letter-spacing: 0.35em; font-size: 1.2rem;"
-            />
-            <button id="code-button" class="btn btn-secondary">
-              Use Code
-            </button>
-          </div>
         </div>
 
         <div style="margin-top: 24px; border-top: 1px solid var(--border); padding-top: 18px;">

@@ -34,9 +34,7 @@ function recordReceive(transferId, fileNames, totalSize, status) {
 }
 
 const els = {
-  pasteSection: document.getElementById("paste-section"),
-  pasteInput: document.getElementById("paste-input"),
-  pasteButton: document.getElementById("paste-button"),
+  receiveSection: document.getElementById("receive-section"),
   status: document.getElementById("status"),
   transferCard: document.getElementById("transfer-card"),
   fileName: document.getElementById("file-name"),
@@ -63,7 +61,7 @@ function setStatus(message, tone = "muted") {
 }
 
 function showTransferCard() {
-  els.pasteSection.classList.add("hidden");
+  els.receiveSection.classList.add("hidden");
   els.transferCard.classList.remove("hidden");
 }
 
@@ -317,7 +315,7 @@ function adoptLink(url) {
   state.accessToken = parsed.accessToken;
 
   if (!state.transferId) {
-    setStatus("Paste a full LynkShare link (it looks like https://lynkshare.app/send/…#key).", "error");
+    setStatus("That is not a valid LynkShare transfer link.", "error");
     return;
   }
   if (!state.aesKey) {
@@ -331,33 +329,19 @@ function adoptLink(url) {
   clean.searchParams.delete("url");
   window.history.replaceState(null, "", clean);
 
-  // Take the key out of the address bar and out of the paste box, so that
-  // the ad script on this page cannot read it, and keep it for a reload.
+  // Take the key out of the address bar, so that the ad script on this page
+  // cannot read it, and keep it for a reload.
   stashLink({
     transferId: state.transferId,
     aesKey: state.aesKey,
     accessToken: state.accessToken,
   });
-  els.pasteInput.value = "";
 
   loadTransfer();
 }
 
 els.downloadButton.addEventListener("click", () => startDownload());
 
-els.pasteButton.addEventListener("click", () => {
-  const raw = els.pasteInput.value.trim();
-  if (!raw) return;
-  try {
-    adoptLink(new URL(raw));
-  } catch {
-    setStatus("That does not look like a valid link.", "error");
-  }
-});
-
-els.pasteInput.addEventListener("keydown", (event) => {
-  if (event.key === "Enter") els.pasteButton.click();
-});
 
 /**
  * Receives by typing the code the sender shows.
@@ -414,7 +398,7 @@ async function startCodeReceive() {
           aesKey: state.aesKey,
           accessToken: state.accessToken,
         });
-        document.getElementById("paste-section").classList.add("hidden");
+        document.getElementById("receive-section").classList.add("hidden");
         loadTransfer();
       } catch (err) {
         clearInterval(window.__lynkCodePoll);
@@ -447,17 +431,9 @@ document.getElementById("code-input").addEventListener("keydown", (event) => {
 const direct = parseSendLink(new URL(window.location.href));
 const stashed = direct.transferId && !direct.aesKey ? peekStashedLink() : null;
 if (direct.transferId && direct.aesKey) {
-  state.transferId = direct.transferId;
-  state.aesKey = direct.aesKey;
-  state.accessToken = direct.accessToken;
-  // The fragment has served its purpose. Remove it from the address bar so
-  // that it cannot travel with an ad request, and keep the key in this tab.
-  stashLink({
-    transferId: state.transferId,
-    aesKey: state.aesKey,
-    accessToken: state.accessToken,
-  });
-  loadTransfer();
+  // adoptLink removes the fragment from the address bar before loading, so
+  // the key cannot travel with an ad request.
+  adoptLink(new URL(window.location.href));
 } else if (stashed && stashed.transferId === direct.transferId) {
   // A reload: the fragment is gone, but the key is still in this tab.
   state.transferId = stashed.transferId;
@@ -504,9 +480,9 @@ async function startPairing() {
     if (typeof window.qrcode !== "function") {
       setStatus("QR generator failed to load — please refresh the page.", "error");
     } else if (typeof crypto.subtle === "undefined" || (typeof window !== "undefined" && !window.isSecureContext)) {
-      setStatus("Pairing requires a secure HTTPS connection — paste the link instead.", "error");
+      setStatus("Pairing requires a secure HTTPS connection — use the 6-digit code instead.", "error");
     } else {
-      setStatus(`Pairing unavailable (${err?.message ?? "unsupported"}) — paste the link instead.`, "error");
+      setStatus(`Pairing unavailable (${err?.message ?? "unsupported"}) — use the 6-digit code instead.`, "error");
     }
     pairButton.disabled = false;
   }
@@ -545,7 +521,7 @@ function pollAttached(api, pairButton) {
           accessToken: state.accessToken,
         });
         state.pairing = null;
-        document.getElementById("paste-section").classList.add("hidden");
+        document.getElementById("receive-section").classList.add("hidden");
         loadTransfer();
       }
     } catch {}
@@ -556,5 +532,5 @@ document.getElementById("pair-button").addEventListener("click", () => startPair
 
 const incomingReceiverQr = parseReceiverQrLink(new URL(window.location.href));
 if (incomingReceiverQr.publicKeyB64) {
-  document.getElementById("paste-section").classList.add("hidden");
+  document.getElementById("receive-section").classList.add("hidden");
 }

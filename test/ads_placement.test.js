@@ -100,7 +100,7 @@ test("the receiver page loads the ad loader after the page script", () => {
 
 test("the receiver page keeps the key out of the DOM", () => {
   const page = read("js/pages/receive.js");
-  assert.ok(page.includes('els.pasteInput.value = ""'), "the pasted link is not cleared");
+  assert.ok(!page.includes("paste-input"), "the receiver still has a paste-link box");
   assert.ok(page.includes("stashLink("), "the key is not taken out of the address bar");
 });
 
