@@ -78,6 +78,7 @@ function setProgress(fraction, label) {
 }
 
 async function loadTransfer() {
+  state.cancelDirect?.();
   showTransferCard();
   setStatus("Fetching transfer details…");
 
@@ -148,70 +149,109 @@ function saveBlob(bytes, fileName) {
 }
 
 async function startDownload() {
+  if (state.downloadActive) return;
+  state.downloadActive = true;
   els.downloadButton.disabled = true;
-
-  // A cloud sender already uploaded, so waiting on a direct connection that
-  // is not coming would only delay the download.
-  if (
-    state.mode !== "cloud" &&
-    isP2pSupported() &&
-    (await tryP2pReceive())
-  ) {
-    return;
+  try {
+    // The collected mode is a hint; verified R2 completion takes precedence.
+    if (state.metadata?.status !== "ready" && state.mode !== "cloud" && isP2pSupported()) {
+      const received = await tryP2pReceive();
+      if (received !== false) return; // true: saved; null: cancelled/replaced
+    }
+    await downloadViaCloud();
+  } finally {
+    state.downloadActive = false;
   }
-  await downloadViaCloud();
 }
 
 function tryP2pReceive() {
   return new Promise((resolve) => {
     let settled = false;
-    let saved = false;
+    let connected = false;
+    let cleanup;
+    let timer;
+    const started = performance.now();
+    const transferId = state.transferId;
+    const accessToken = state.accessToken;
+    const names = [];
+    let totalBytes = 0;
+    const expectedFiles = Math.max(state.metadata?.total_files ?? state.metadata?.files?.length ?? 1, 1);
     const settle = (value) => {
       if (settled) return;
       settled = true;
+      clearTimeout(timer);
+      cleanup?.();
+      if (state.cancelDirect === cancel) state.cancelDirect = null;
       resolve(value);
+    };
+    const cancel = () => settle(null);
+    state.cancelDirect = cancel;
+    const pollReadiness = async () => {
+      if (settled || connected || performance.now() - started >= 30000) return;
+      try {
+        const api = new LynkApi({ baseUrl: resolveApiBase() });
+        const metadata = await api.getTransferMetadata(transferId, accessToken);
+        // Channel open or cancellation can win while the request is in flight.
+        if (settled || connected) return;
+        if (metadata.status === "ready") {
+          state.metadata = metadata;
+          settle(false);
+          return;
+        }
+      } catch {
+        // A transient metadata failure does not decide the transport.
+      }
+      if (!settled && !connected) timer = setTimeout(pollReadiness, 3000);
     };
 
     setStatus("Waiting for the sender's direct connection…");
     setProgress(0, "");
 
-    receiveViaP2p({
-      apiBase: resolveApiBase(),
-      transferId: state.transferId,
-      aesKey: state.aesKey,
-      accessToken: state.accessToken,
-      onStatus: (event, info) => {
-        if (settled) {
+    try {
+      cleanup = receiveViaP2p({
+        apiBase: resolveApiBase(),
+        transferId,
+        aesKey: state.aesKey,
+        accessToken,
+        onStatus: (event, info) => {
+          if (settled) return;
+          if (event === "p2p-connected" || event === "p2p-header" || event === "p2p-progress") {
+            connected = true;
+            clearTimeout(timer);
+          }
           if (event === "p2p-progress") {
             const fraction = info.expected ? info.received / info.expected : 0;
             setProgress(fraction * 0.9);
           }
-          if (event === "p2p-failed" && !saved) {
-            // The direct connection did not work out, but the sender may
-            // still be perfectly fine. The cloud path is tried next, so this
-            // is not an error worth alarming the reader about.
-            setStatus("Direct transfer failed. Falling back to the server.");
+          if (event === "p2p-header") {
+            els.fileName.textContent = info.name;
+            els.fileMeta.textContent = formatBytes(info.size);
           }
-          return;
-        }
-        if (event === "p2p-header") {
-          els.fileName.textContent = info.name;
-          els.fileMeta.textContent = formatBytes(info.size);
-        }
-        if (typeof event === "string" && event.startsWith("p2p-failed")) {
-          settle(false);
-        }
-      },
-      onFileSaved: (plaintext, name) => {
-        saved = true;
-        saveBlob(plaintext, name);
-        recordReceive(state.transferId, [name], plaintext.length, "completed (p2p)");
-        setProgress(1, "Done");
-        setStatus("Saved! Check your browser downloads.", "success");
-        els.downloadButton.disabled = false;
-        settle(true);
-      },
-    });
+          if (typeof event === "string" && event.startsWith("p2p-failed")) {
+            settle(false);
+          }
+        },
+        onFileSaved: (plaintext, name) => {
+          if (settled) return;
+          connected = true;
+          clearTimeout(timer);
+          saveBlob(plaintext, name);
+          names.push(name);
+          totalBytes += plaintext.length;
+          if (names.length < expectedFiles) return;
+          recordReceive(transferId, names, totalBytes, "completed (p2p)");
+          setProgress(1, "Done");
+          setStatus("Saved! Check your browser downloads.", "success");
+          els.downloadButton.disabled = false;
+          settle(true);
+        },
+      });
+      // Native setup can fail synchronously before returning its cleanup.
+      if (settled) cleanup?.();
+      else if (!connected) timer = setTimeout(pollReadiness, 3000);
+    } catch {
+      settle(false);
+    }
   });
 }
 

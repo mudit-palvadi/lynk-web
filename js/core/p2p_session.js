@@ -63,8 +63,13 @@ export function receiveViaP2p({ apiBase, transferId, aesKey, accessToken, onStat
   let ws;
   let pc;
   let activeFile = null;
+  let closed = false;
+  let coordinator;
 
   const cleanup = () => {
+    if (closed) return;
+    closed = true;
+    coordinator?.dispose();
     try {
       pc?.close();
     } catch {}
@@ -74,12 +79,13 @@ export function receiveViaP2p({ apiBase, transferId, aesKey, accessToken, onStat
   };
 
   const fail = (reason) => {
+    if (closed) return;
     onStatus?.(`p2p-failed:${reason}`);
     cleanup();
   };
 
   const handleBinaryChunk = async (data) => {
-    if (!activeFile) return;
+    if (closed || !activeFile) return;
     try {
       activeFile.collector.add(new Uint8Array(data));
     } catch (err) {
@@ -97,16 +103,20 @@ export function receiveViaP2p({ apiBase, transferId, aesKey, accessToken, onStat
   const finishActiveFile = async () => {
     if (!activeFile) return;
     const packed = await activeFile.collector.close();
+    if (closed) return;
     const plaintext = await decryptWithIvPrefix(packed, aesKey);
+    if (closed) return;
     onFileSaved?.(plaintext, activeFile.name);
     activeFile = null;
   };
 
   const handleTextFrame = async (raw) => {
+    if (closed) return;
     const frame = parseText(raw);
     if (!frame) return;
     if (frame.kind === "header" && !activeFile) {
       const name = frame.token ? await openName(frame.token, aesKey) : frame.name;
+      if (closed) return;
       if (!name) {
         fail("header");
         return;
@@ -126,12 +136,12 @@ export function receiveViaP2p({ apiBase, transferId, aesKey, accessToken, onStat
     }
   };
 
-  const coordinator = new P2pCoordinator({
+  coordinator = new P2pCoordinator({
     timeoutMs: 30000,
     onP2PFailed: () => fail("timeout"),
     actions: {
       async handleRemoteDescription(message) {
-        if (message.type !== "offer") return null;
+        if (closed || message.type !== "offer") return null;
         pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
 
         pc.ondatachannel = (event) => {
@@ -139,11 +149,13 @@ export function receiveViaP2p({ apiBase, transferId, aesKey, accessToken, onStat
           if (channel.label !== "fileTransfer") return;
           channel.binaryType = "arraybuffer";
           channel.onopen = () => {
+            if (closed) return;
             // Tells the sender this side can read a sealed name (#32).
             try {
               channel.send(encodeHello());
             } catch {}
             coordinator.notifyConnected();
+            onStatus?.("p2p-connected");
           };
           channel.onmessage = (evt) => {
             if (typeof evt.data === "string") {
@@ -168,7 +180,9 @@ export function receiveViaP2p({ apiBase, transferId, aesKey, accessToken, onStat
         };
 
         await pc.setRemoteDescription({ type: "offer", sdp: message.sdp });
+        if (closed) return null;
         const answer = await pc.createAnswer();
+        if (closed) return null;
         await pc.setLocalDescription(answer);
         return { type: "answer", sdp: answer.sdp };
       },
