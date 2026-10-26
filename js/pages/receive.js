@@ -13,6 +13,7 @@ import {
   unwrapDelivery,
 } from "../core/key_wrap.js";
 import { isP2pSupported, receiveViaP2p } from "../core/p2p_session.js";
+import { acquireReceiverOwnership } from "../core/receiver_ownership.js";
 import { HistoryStore } from "../core/history_store.js";
 import {
   isNotReadyError,
@@ -152,6 +153,7 @@ async function startDownload() {
   if (state.downloadActive) return;
   state.downloadActive = true;
   els.downloadButton.disabled = true;
+  els.downloadButton.textContent = "Download & Decrypt";
   try {
     // The collected mode is a hint; verified R2 completion takes precedence.
     if (state.metadata?.status !== "ready" && state.mode !== "cloud" && isP2pSupported()) {
@@ -170,26 +172,48 @@ function tryP2pReceive() {
     let connected = false;
     let cleanup;
     let timer;
-    const started = performance.now();
+    let ownership;
+    let nativeSetup = false;
+    let finishing = false;
+    let result;
+    let started;
+    const apiBase = resolveApiBase();
     const transferId = state.transferId;
     const accessToken = state.accessToken;
+    const aesKey = state.aesKey;
     const names = [];
     let totalBytes = 0;
     const expectedFiles = Math.max(state.metadata?.total_files ?? state.metadata?.files?.length ?? 1, 1);
+    const finish = () => {
+      if (!settled || nativeSetup || finishing) return;
+      finishing = true;
+      // Await native cleanup before returning ownership to another tab. Also
+      // handle native setup that invokes a failure callback synchronously.
+      let cleaned;
+      try { cleaned = cleanup?.(); } catch { /* Still release ownership. */ }
+      Promise.resolve(cleaned).catch(() => {}).then(() => ownership?.release())
+        .then(() => resolve(result), () => resolve(result));
+    };
     const settle = (value) => {
       if (settled) return;
       settled = true;
+      result = value;
       clearTimeout(timer);
-      cleanup?.();
       if (state.cancelDirect === cancel) state.cancelDirect = null;
-      resolve(value);
+      finish();
     };
-    const cancel = () => settle(null);
+    const cancel = () => {
+      if (settled) return;
+      els.downloadButton.disabled = false;
+      els.downloadButton.textContent = "Retry";
+      setStatus("Direct reception stopped. Press Retry to receive again.");
+      settle(null);
+    };
     state.cancelDirect = cancel;
     const pollReadiness = async () => {
       if (settled || connected || performance.now() - started >= 30000) return;
       try {
-        const api = new LynkApi({ baseUrl: resolveApiBase() });
+        const api = new LynkApi({ baseUrl: apiBase });
         const metadata = await api.getTransferMetadata(transferId, accessToken);
         // Channel open or cancellation can win while the request is in flight.
         if (settled || connected) return;
@@ -204,54 +228,77 @@ function tryP2pReceive() {
       if (!settled && !connected) timer = setTimeout(pollReadiness, 3000);
     };
 
-    setStatus("Waiting for the sender's direct connection…");
+    setStatus("Checking whether this transfer is open in another tab…");
     setProgress(0, "");
 
-    try {
-      cleanup = receiveViaP2p({
-        apiBase: resolveApiBase(),
-        transferId,
-        aesKey: state.aesKey,
-        accessToken,
-        onStatus: (event, info) => {
-          if (settled) return;
-          if (event === "p2p-connected" || event === "p2p-header" || event === "p2p-progress") {
+    (async () => {
+      const acquired = await acquireReceiverOwnership({ apiBase, transferId });
+      if (settled) {
+        // A cancellation/pagehide may win before the browser grants the lock.
+        if (acquired.status === "acquired") await acquired.release();
+        return;
+      }
+      if (acquired.status === "busy") {
+        setStatus("This transfer is already receiving in another tab. Finish or close that tab, then press Retry.");
+        els.downloadButton.disabled = false;
+        els.downloadButton.textContent = "Retry";
+        settle(null); // Do not start a duplicate cloud download on contention.
+        return;
+      }
+      if (acquired.status !== "acquired") {
+        setStatus("Direct reception is unavailable here. Waiting for the sender's cloud upload…");
+        settle(false);
+        return;
+      }
+      ownership = acquired;
+      started = performance.now();
+      setStatus("Waiting for the sender's direct connection…");
+      nativeSetup = true;
+      try {
+        cleanup = receiveViaP2p({
+          apiBase,
+          transferId,
+          aesKey,
+          accessToken,
+          onStatus: (event, info) => {
+            if (settled) return;
+            if (event === "p2p-connected" || event === "p2p-header" || event === "p2p-progress") {
+              connected = true;
+              clearTimeout(timer);
+            }
+            if (event === "p2p-progress") {
+              const fraction = info.expected ? info.received / info.expected : 0;
+              setProgress(fraction * 0.9);
+            }
+            if (event === "p2p-header") {
+              els.fileName.textContent = info.name;
+              els.fileMeta.textContent = formatBytes(info.size);
+            }
+            if (typeof event === "string" && event.startsWith("p2p-failed")) {
+              settle(false);
+            }
+          },
+          onFileSaved: (plaintext, name) => {
+            if (settled) return;
             connected = true;
             clearTimeout(timer);
-          }
-          if (event === "p2p-progress") {
-            const fraction = info.expected ? info.received / info.expected : 0;
-            setProgress(fraction * 0.9);
-          }
-          if (event === "p2p-header") {
-            els.fileName.textContent = info.name;
-            els.fileMeta.textContent = formatBytes(info.size);
-          }
-          if (typeof event === "string" && event.startsWith("p2p-failed")) {
-            settle(false);
-          }
-        },
-        onFileSaved: (plaintext, name) => {
-          if (settled) return;
-          connected = true;
-          clearTimeout(timer);
-          saveBlob(plaintext, name);
-          names.push(name);
-          totalBytes += plaintext.length;
-          if (names.length < expectedFiles) return;
-          recordReceive(transferId, names, totalBytes, "completed (p2p)");
-          setProgress(1, "Done");
-          setStatus("Saved! Check your browser downloads.", "success");
-          els.downloadButton.disabled = false;
-          settle(true);
-        },
-      });
-      // Native setup can fail synchronously before returning its cleanup.
-      if (settled) cleanup?.();
-      else if (!connected) timer = setTimeout(pollReadiness, 3000);
-    } catch {
-      settle(false);
-    }
+            saveBlob(plaintext, name);
+            names.push(name);
+            totalBytes += plaintext.length;
+            if (names.length < expectedFiles) return;
+            recordReceive(transferId, names, totalBytes, "completed (p2p)");
+            setProgress(1, "Done");
+            setStatus("Saved! Check your browser downloads.", "success");
+            els.downloadButton.disabled = false;
+            settle(true);
+          },
+        });
+      } finally {
+        nativeSetup = false;
+        finish();
+      }
+      if (!settled && !connected) timer = setTimeout(pollReadiness, 3000);
+    })().catch(() => settle(false));
   });
 }
 
@@ -382,6 +429,9 @@ function adoptLink(url) {
 
 els.downloadButton.addEventListener("click", () => startDownload());
 
+// A hidden tab may still be receiving; only leaving the page cancels direct
+// work. BFCache restoration keeps the Retry button and claims a fresh lock.
+window.addEventListener("pagehide", () => state.cancelDirect?.());
 
 /**
  * Receives by typing the code the sender shows.
