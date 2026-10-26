@@ -11,30 +11,41 @@ export function parseMessage(raw) {
 
   switch (json.type) {
     case "offer":
-      return { type: "offer", sdp: json.sdp ?? null };
+      return encodeOffer(json.sdp);
     case "answer":
-      return { type: "answer", sdp: json.sdp ?? null };
+      return encodeAnswer(json.sdp);
     case "candidate":
-      return {
-        type: "candidate",
-        candidate:
-          json.candidate !== null && typeof json.candidate === "object"
-            ? json.candidate
-            : null,
-      };
+      return encodeCandidate(json.candidate);
     default:
       return { type: "error" };
   }
 }
 
 export function encodeOffer(sdp) {
-  return { type: "offer", sdp };
+  return encodeSdp("offer", sdp);
 }
 
 export function encodeAnswer(sdp) {
-  return { type: "answer", sdp };
+  return encodeSdp("answer", sdp);
 }
 
 export function encodeCandidate(candidate) {
-  return { type: "candidate", candidate };
+  if (candidate === null || typeof candidate !== "object" || Array.isArray(candidate) ||
+      typeof candidate.candidate !== "string") return { type: "error" };
+  const { sdpMid: mid, sdpMLineIndex: index } = candidate;
+  if (mid != null && typeof mid !== "string") return { type: "error" };
+  if (index != null && (!Number.isInteger(index) || index < 0 || index > 65535)) {
+    return { type: "error" };
+  }
+  // Preserve omitted/null fields, including the empty end-of-candidates marker.
+  const normalized = { candidate: candidate.candidate };
+  if (Object.hasOwn(candidate, "sdpMid")) normalized.sdpMid = mid;
+  if (Object.hasOwn(candidate, "sdpMLineIndex")) normalized.sdpMLineIndex = index;
+  return { type: "candidate", candidate: normalized };
+}
+
+function encodeSdp(type, sdp) {
+  return typeof sdp === "string" && sdp.trim().length > 0
+    ? { type, sdp }
+    : { type: "error" };
 }
