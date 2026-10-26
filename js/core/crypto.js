@@ -1,15 +1,12 @@
 const IV_LENGTH = 16;
 const KEY_LENGTH = 32;
 
-function sanitizeKey(keyString) {
-  const clean = String(keyString ?? "").trim();
-  if (clean.length === KEY_LENGTH) return clean;
-  if (clean.length > KEY_LENGTH) return clean.slice(0, KEY_LENGTH);
-  return clean.padEnd(KEY_LENGTH, "0");
-}
-
 function importAesKey(keyString) {
-  const keyBytes = new TextEncoder().encode(sanitizeKey(keyString));
+  const keyBytes = typeof keyString === "string"
+    ? new TextEncoder().encode(keyString.trim()) : null;
+  if (keyBytes?.length !== KEY_LENGTH) {
+    throw new Error("an AES-256 key must be exactly 32 UTF-8 bytes");
+  }
   return crypto.subtle.importKey("raw", keyBytes, { name: "AES-CBC" }, false, [
     "encrypt",
     "decrypt",

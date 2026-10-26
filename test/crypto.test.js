@@ -92,18 +92,11 @@ test("a tampered ciphertext never gives back the original plaintext", async () =
   }
 });
 
-test("keys are sanitized exactly like EncryptFileUseCase._sanitizeKey", async () => {
-  const short = "too-short";
-  const plain = new TextEncoder().encode("sanitize me");
-
-  const out = await encryptWithIvPrefix(plain, short);
-  const recovered = referenceDecrypt(out, short.padEnd(32, "0"));
-  assert.equal(recovered.toString("utf8"), "sanitize me");
-
-  const long = KEY + "EXTRA-IGNORED";
-  const outLong = await encryptWithIvPrefix(plain, long);
-  const recoveredLong = referenceDecrypt(outLong, KEY);
-  assert.equal(recoveredLong.toString("utf8"), "sanitize me");
+test("invalid keys are rejected rather than silently padded or truncated", async () => {
+  const plain = new TextEncoder().encode("strict key validation");
+  for (const key of ["too-short", KEY + "EXTRA-IGNORED", null, 123]) {
+    await assert.rejects(encryptWithIvPrefix(plain, key), /exactly 32 UTF-8 bytes/);
+  }
 });
 
 test("empty payload produces IV plus padding block only", async () => {
