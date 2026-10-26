@@ -51,6 +51,80 @@ export async function openName(token, aesKey) {
   }
 }
 
+// Gathering starts inside setLocalDescription, before the offer or answer is
+// written to the socket. Candidates that leave first are replayed ahead of
+// that description, and the other peer drops them.
+export function createOutboundOrder() {
+  const pending = [];
+  let descriptionSent = false;
+  return {
+    stage(message) {
+      const description = message?.type === "offer" || message?.type === "answer";
+      if (!description && !descriptionSent) {
+        if (message?.type === "candidate") pending.push(message);
+        return [];
+      }
+      if (!description) return [message];
+      descriptionSent = true;
+      const ready = [message, ...pending];
+      pending.length = 0;
+      return ready;
+    },
+  };
+}
+
+// Remote candidates are applied only after setRemoteDescription finishes.
+export function createRemoteCandidateQueue() {
+  const pending = [];
+  let ready = false;
+  return {
+    add(candidate) {
+      if (!ready) {
+        pending.push(candidate);
+        return [];
+      }
+      return [candidate];
+    },
+    markReady() {
+      ready = true;
+      return pending.splice(0);
+    },
+  };
+}
+
+function candidateMessage(event) {
+  return {
+    type: "candidate",
+    candidate: {
+      candidate: event.candidate.candidate,
+      sdpMid: event.candidate.sdpMid ?? undefined,
+      sdpMLineIndex: event.candidate.sdpMLineIndex ?? undefined,
+    },
+  };
+}
+
+function sendStaged(ws, outbound, message) {
+  for (const ready of outbound.stage(message)) {
+    if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(ready));
+  }
+}
+
+async function addQueued(pc, inbound, candidate) {
+  for (const ready of inbound.add(candidate)) {
+    try {
+      await pc?.addIceCandidate(ready);
+    } catch {}
+  }
+}
+
+async function flushQueued(pc, inbound) {
+  for (const ready of inbound.markReady()) {
+    try {
+      await pc?.addIceCandidate(ready);
+    } catch {}
+  }
+}
+
 export function isP2pSupported() {
   return (
     typeof window !== "undefined" &&
@@ -136,6 +210,8 @@ export function receiveViaP2p({ apiBase, transferId, aesKey, accessToken, onStat
     }
   };
 
+  const outbound = createOutboundOrder();
+  const inbound = createRemoteCandidateQueue();
   coordinator = new P2pCoordinator({
     timeoutMs: 30000,
     onP2PFailed: () => fail("timeout"),
@@ -166,20 +242,12 @@ export function receiveViaP2p({ apiBase, transferId, aesKey, accessToken, onStat
           };
         };
         pc.onicecandidate = (event) => {
-          if (!event.candidate || !ws || ws.readyState !== WebSocket.OPEN) return;
-          ws.send(
-            JSON.stringify({
-              type: "candidate",
-              candidate: {
-                candidate: event.candidate.candidate,
-                sdpMid: event.candidate.sdpMid ?? undefined,
-                sdpMLineIndex: event.candidate.sdpMLineIndex ?? undefined,
-              },
-            }),
-          );
+          if (!event.candidate) return;
+          sendStaged(ws, outbound, candidateMessage(event));
         };
 
         await pc.setRemoteDescription({ type: "offer", sdp: message.sdp });
+        await flushQueued(pc, inbound);
         if (closed) return null;
         const answer = await pc.createAnswer();
         if (closed) return null;
@@ -187,14 +255,10 @@ export function receiveViaP2p({ apiBase, transferId, aesKey, accessToken, onStat
         return { type: "answer", sdp: answer.sdp };
       },
       async addIceCandidate(candidate) {
-        try {
-          await pc?.addIceCandidate(candidate);
-        } catch {}
+        await addQueued(pc, inbound, candidate);
       },
       async sendSignaling(message) {
-        if (ws && ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify(message));
-        }
+        sendStaged(ws, outbound, message);
       },
     },
   });
@@ -233,6 +297,8 @@ export function sendViaP2p({ apiBase, sessionId, files, accessToken, aesKey, onS
     const helloSeen = new Promise((resolve) => {
       helloResolve = resolve;
     });
+    const outbound = createOutboundOrder();
+    const inbound = createRemoteCandidateQueue();
 
     const finish = (delivered) => {
       if (settled) return;
@@ -331,17 +397,8 @@ export function sendViaP2p({ apiBase, sessionId, files, accessToken, aesKey, onS
             if (frame && frame.kind === "hello") helloResolve(true);
           };
           pc.onicecandidate = (event) => {
-            if (!event.candidate || !ws || ws.readyState !== WebSocket.OPEN) return;
-            ws.send(
-              JSON.stringify({
-                type: "candidate",
-                candidate: {
-                  candidate: event.candidate.candidate,
-                  sdpMid: event.candidate.sdpMid ?? undefined,
-                  sdpMLineIndex: event.candidate.sdpMLineIndex ?? undefined,
-                },
-              }),
-            );
+            if (!event.candidate) return;
+            sendStaged(ws, outbound, candidateMessage(event));
           };
 
           const offer = await pc.createOffer();
@@ -351,17 +408,14 @@ export function sendViaP2p({ apiBase, sessionId, files, accessToken, aesKey, onS
         async handleRemoteDescription(message) {
           if (message.type !== "answer" || !pc) return null;
           await pc.setRemoteDescription({ type: "answer", sdp: message.sdp });
+          await flushQueued(pc, inbound);
           return null;
         },
         async addIceCandidate(candidate) {
-          try {
-            await pc?.addIceCandidate(candidate);
-          } catch {}
+          await addQueued(pc, inbound, candidate);
         },
         async sendSignaling(message) {
-          if (ws && ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify(message));
-          }
+          sendStaged(ws, outbound, message);
         },
       },
     });
