@@ -45,6 +45,7 @@ let currentLink = null;
 let currentAccessToken = null;
 let senderCodeTransferId = null;
 let pendingPair = null;
+let sendActive = false;
 
 // Set once a phone is on the other end: connected over the direct channel,
 // or paired by scanning its QR. A QR code is only useful to a receiver that
@@ -88,6 +89,7 @@ function generateKey() {
 }
 
 function removeFile(index) {
+  if (sendActive) return;
   selectedFiles.splice(index, 1);
   refreshPickState();
 }
@@ -242,6 +244,10 @@ async function deliverToPairedPhone(encrypted, key) {
 }
 
 async function sendCloud() {
+  if (sendActive) return;
+  sendActive = true;
+  senderCodeTransferId = null;
+  clearInterval(window.__lynkSenderCodePoll);
   try {
     const key = generateKey();
     const encrypted = await encryptAll(key);
@@ -252,10 +258,16 @@ async function sendCloud() {
       err instanceof LimitExceededError
         ? err.message
         : "Upload failed — check your connection and try again.";
+  } finally {
+    sendActive = false;
   }
 }
 
 async function sendP2P() {
+  if (sendActive) return;
+  sendActive = true;
+  senderCodeTransferId = null;
+  clearInterval(window.__lynkSenderCodePoll);
   try {
     const key = generateKey();
     const encrypted = await encryptAll(key);
@@ -318,6 +330,8 @@ async function sendP2P() {
   } catch (err) {
     els.progressTitle.textContent = "Something went wrong";
     els.progressLabel.textContent = err?.message ?? "Transfer failed.";
+  } finally {
+    sendActive = false;
   }
 }
 
@@ -335,16 +349,22 @@ async function showSenderCode(transferId, key, transferMode) {
   if (senderCodeTransferId === transferId) return;
 
   senderCodeTransferId = transferId;
+  const accessToken = currentAccessToken;
+  const isCurrent = () => senderCodeTransferId === transferId;
   clearInterval(window.__lynkSenderCodePoll);
 
   try {
     const api = new LynkApi({ baseUrl: resolveApiBase() });
     const session = await api.createSenderSession();
+    if (!isCurrent()) return;
     codeEl.textContent = session.code;
     statusEl.textContent = "Waiting for the receiver…";
 
     let elapsed = 0;
+    let polling = false;
     window.__lynkSenderCodePoll = setInterval(async () => {
+      if (!isCurrent() || polling) return;
+      polling = true;
       elapsed += 2;
       if (elapsed > session.expiresIn) {
         clearInterval(window.__lynkSenderCodePoll);
@@ -353,28 +373,35 @@ async function showSenderCode(transferId, key, transferMode) {
       }
       try {
         const view = await api.getSenderSession(session.sessionId);
+        if (!isCurrent()) return;
         if (!view.receiverPk) return;
         clearInterval(window.__lynkSenderCodePoll);
         statusEl.textContent = "Receiver joined — handing over the key…";
         const wrapped = await wrapKey({
           aesKey: key,
-          accessToken: currentAccessToken,
+          accessToken,
           receiverPublicKeyB64: view.receiverPk,
           sessionId: session.sessionId,
         });
+        if (!isCurrent()) return;
         await api.attachSenderKey(
           session.sessionId,
           transferId,
           wrapped,
           transferMode,
         );
+        if (!isCurrent()) return;
         statusEl.textContent = "Receiver joined — files unlocked.";
       } catch {
+        if (!isCurrent()) return;
         clearInterval(window.__lynkSenderCodePoll);
         statusEl.textContent = "Code pairing failed — send the link instead.";
+      } finally {
+        polling = false;
       }
     }, 2000);
   } catch {
+    if (!isCurrent()) return;
     codeEl.textContent = "······";
     statusEl.textContent = "Code pairing unavailable — send the link instead.";
   }
@@ -451,6 +478,7 @@ function setResultStatus(message, tone) {
 els.tierLabel.textContent = `${maxTotalSize("cloud", false) / (1024 * 1024)} MB`;
 
 els.fileInput.addEventListener("change", () => {
+  if (sendActive) { els.fileInput.value = ""; return; }
   const newFiles = Array.from(els.fileInput.files ?? []);
   selectedFiles = [...selectedFiles, ...newFiles];
   els.fileInput.value = "";
@@ -476,6 +504,7 @@ els.dropZone.addEventListener("dragleave", (e) => {
 els.dropZone.addEventListener("drop", (e) => {
   e.preventDefault();
   els.dropZone.classList.remove("drag-active");
+  if (sendActive) return;
   const dropped = Array.from(e.dataTransfer?.files ?? []);
   selectedFiles = [...selectedFiles, ...dropped];
   refreshPickState();
@@ -485,6 +514,7 @@ els.p2pButton.addEventListener("click", () => sendP2P());
 els.cloudButton.addEventListener("click", () => sendCloud());
 
 document.getElementById("scan-pair-button").addEventListener("click", async () => {
+  if (sendActive) return;
   if (!selectedFiles.length) {
     els.pickStatus.textContent = "Select files first before pairing.";
     els.pickStatus.className = "status-pill status-warn";
@@ -504,6 +534,7 @@ document.getElementById("scan-pair-button").addEventListener("click", async () =
     });
     scannerCard.classList.add("hidden");
     cancelScan = null;
+    if (sendActive) return;
 
     const parsed = parseReceiverQrLink(new URL(link));
     if (!parsed.sessionId || !parsed.publicKeyB64) {
