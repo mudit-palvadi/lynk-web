@@ -8,7 +8,7 @@ const page = readFileSync(new URL("../js/pages/receive.js", import.meta.url), "u
 const receiveCode = page.slice(page.indexOf("async function startDownload()"), page.indexOf("async function downloadViaCloud()"));
 const flush = () => new Promise((resolve) => setImmediate(resolve));
 
-function receiver(status = "uploading", acquireOwnership = async () => ({ status: "acquired", release: async () => {} })) {
+function receiver(status = "uploading", acquireOwnership = async () => ({ status: "acquired", release: async () => {} }), autoComplete = true) {
   const timers = new Map();
   const events = new Map();
   const calls = { direct: 0, cloud: 0, cleanup: 0, saves: 0, metadata: [], statuses: [] };
@@ -30,6 +30,13 @@ function receiver(status = "uploading", acquireOwnership = async () => ({ status
     receiveViaP2p: (options) => {
       calls.direct++;
       callbacks = options;
+      const save = options.onFileSaved;
+      let saved = 0;
+      options.onFileSaved = (...args) => {
+        const accepted = save(...args);
+        if (accepted === true && ++saved === options.expectedFiles && autoComplete) options.onComplete();
+        return accepted;
+      };
       return () => { calls.cleanup++; };
     },
     LynkApi: class {
@@ -83,6 +90,31 @@ test("ready metadata bypasses a stale direct code hint", async () => {
   await reception;
   assert.equal(run.calls.direct, 0);
   assert.equal(run.calls.cloud, 1);
+});
+
+test("all files may be saved without closing the channel before its receipt drains", async () => {
+  const run = receiver("uploading", undefined, false);
+  const reception = run.begin();
+  await flush();
+  run.callbacks.onFileSaved(new Uint8Array([1]), "one.txt");
+  assert.equal(run.calls.saves, 1);
+  assert.equal(run.calls.cleanup, 0);
+  run.callbacks.onComplete();
+  await reception;
+  assert.equal(run.calls.cleanup, 1);
+  assert.equal(run.calls.cloud, 0);
+});
+
+test("a receipt failure after saving never automatically downloads another copy", async () => {
+  const run = receiver("uploading", undefined, false);
+  const reception = run.begin();
+  await flush();
+  run.callbacks.onFileSaved(new Uint8Array([1]), "one.txt");
+  run.callbacks.onStatus("p2p-failed:receipt-drain");
+  await reception;
+  assert.equal(run.calls.saves, 1);
+  assert.equal(run.calls.cloud, 0);
+  assert.equal(run.context.els.downloadButton.textContent, "Retry");
 });
 
 test("cloud readiness during negotiation wins once and discards late direct saves", async () => {

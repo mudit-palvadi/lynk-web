@@ -1,5 +1,5 @@
 import { parseMessage, encodeOffer } from "./signaling.js";
-import { parseText, encodeHeader, encodeEof, encodeDone, encodeHello } from "./framer.js";
+import { parseText, encodeHeader, encodeEof, encodeDone, encodeHello, encodeReceipt } from "./framer.js";
 import { ChunkCollector } from "./chunk_collector.js";
 import { ChunkSender } from "./chunk_sender.js";
 import { decryptWithIvPrefix, encryptWithIvPrefix } from "./crypto.js";
@@ -133,13 +133,17 @@ export function isP2pSupported() {
   );
 }
 
-export function receiveViaP2p({ apiBase, transferId, aesKey, accessToken, onStatus, onFileSaved }) {
+export function receiveViaP2p({ apiBase, transferId, aesKey, accessToken, onStatus, onFileSaved, onComplete, expectedFiles, drainTimeoutMs = 5000 }) {
   let ws;
   let pc;
   let activeFile = null;
   let closed = false;
   let coordinator;
   let incoming = Promise.resolve();
+  let dataChannel;
+  let deliveredFiles = 0;
+  let deliveredBytes = 0;
+  let completed = false;
 
   const cleanup = () => {
     if (closed) return;
@@ -182,8 +186,13 @@ export function receiveViaP2p({ apiBase, transferId, aesKey, accessToken, onStat
     if (closed) return;
     const plaintext = await decryptWithIvPrefix(packed, aesKey);
     if (closed) return;
-    await onFileSaved?.(plaintext, file.name);
+    if (await onFileSaved?.(plaintext, file.name) === false) {
+      cleanup();
+      return;
+    }
     if (closed) return;
+    deliveredFiles++;
+    deliveredBytes += file.size;
     activeFile = null;
   };
 
@@ -191,7 +200,9 @@ export function receiveViaP2p({ apiBase, transferId, aesKey, accessToken, onStat
     if (closed) return;
     const frame = parseText(raw);
     if (!frame) return;
-    if (frame.kind === "header" && !activeFile) {
+    if (completed) return;
+    if (frame.kind === "header") {
+      if (activeFile || deliveredFiles >= (expectedFiles ?? 10)) return fail("header");
       const name = frame.token ? await openName(frame.token, aesKey) : frame.name;
       if (closed) return;
       if (!name) {
@@ -209,7 +220,19 @@ export function receiveViaP2p({ apiBase, transferId, aesKey, accessToken, onStat
       const matches = activeFile.token
         ? frame.token === activeFile.token
         : frame.name === activeFile.name;
-      if (matches) await finishActiveFile();
+      if (!matches) return fail("eof");
+      await finishActiveFile();
+    } else if (frame.kind === "done") {
+      if (activeFile || !deliveredFiles || (expectedFiles != null && deliveredFiles !== expectedFiles)) return fail("incomplete");
+      completed = true;
+      dataChannel.send(encodeReceipt(deliveredFiles, deliveredBytes));
+      const started = performance.now();
+      while (!closed && dataChannel.readyState !== "closed" && dataChannel.bufferedAmount > 0) {
+        if (performance.now() - started >= drainTimeoutMs) return fail("receipt-drain");
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+      if (closed) return;
+      await onComplete?.();
     }
   };
 
@@ -226,12 +249,13 @@ export function receiveViaP2p({ apiBase, transferId, aesKey, accessToken, onStat
         pc.ondatachannel = (event) => {
           const channel = event.channel;
           if (channel.label !== "fileTransfer") return;
+          dataChannel = channel;
           channel.binaryType = "arraybuffer";
           channel.onopen = () => {
             if (closed) return;
             // Tells the sender this side can read a sealed name (#32).
             try {
-              channel.send(encodeHello());
+              channel.send(encodeHello(2, true));
             } catch {}
             coordinator.notifyConnected();
             onStatus?.("p2p-connected");
@@ -243,6 +267,8 @@ export function receiveViaP2p({ apiBase, transferId, aesKey, accessToken, onStat
               ? handleTextFrame(evt.data) : handleBinaryChunk(evt.data))
               .catch(() => fail("receive"));
           };
+          channel.onerror = () => fail("channel");
+          channel.onclose = () => { if (!completed) fail("closed"); };
         };
         pc.onicecandidate = (event) => {
           if (!event.candidate) return;

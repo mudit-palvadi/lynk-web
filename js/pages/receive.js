@@ -260,6 +260,7 @@ function tryP2pReceive() {
           transferId,
           aesKey,
           accessToken,
+          expectedFiles,
           onStatus: (event, info) => {
             if (settled) return;
             if (event === "p2p-connected" || event === "p2p-header" || event === "p2p-progress") {
@@ -275,20 +276,28 @@ function tryP2pReceive() {
               els.fileMeta.textContent = formatBytes(info.size);
             }
             if (typeof event === "string" && event.startsWith("p2p-failed")) {
-              settle(false);
+              if (names.length) {
+                setStatus("Some files were handed to your browser. Direct confirmation failed; check Downloads before retrying.");
+                els.downloadButton.disabled = false;
+                els.downloadButton.textContent = "Retry";
+                settle(null); // Never automatically save a second copy.
+              } else settle(false);
             }
           },
           onFileSaved: (plaintext, name) => {
-            if (settled) return;
+            if (settled || names.length >= expectedFiles) return false;
             connected = true;
             clearTimeout(timer);
             saveBlob(plaintext, name);
             names.push(name);
             totalBytes += plaintext.length;
-            if (names.length < expectedFiles) return;
+            return true;
+          },
+          onComplete: () => {
+            if (settled || names.length !== expectedFiles) return;
             recordReceive(transferId, names, totalBytes, "completed (p2p)");
             setProgress(1, "Done");
-            setStatus("Saved! Check your browser downloads.", "success");
+            setStatus("Files handed to your browser. Check Downloads.", "success");
             els.downloadButton.disabled = false;
             settle(true);
           },

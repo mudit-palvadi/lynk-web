@@ -44,14 +44,8 @@ test("a sealed name opens only with the transfer key", async () => {
   assert.notEqual(await openName(token, "ffffffffffffffffffffffffffffffff"), "holiday.jpg");
 });
 
-test("the sender waits for the hello before it seals", () => {
-  const source = read("js/core/p2p_session.js");
-  const wait = source.indexOf("peerOpensNames");
-  const header = source.indexOf("encodeHeader(", source.indexOf("sendFrames"));
-  assert.ok(wait >= 0, "the sender never waits for the hello");
-  assert.ok(header > wait, "a header goes out before the peer has said hello");
-  assert.match(source, /channel\.onopen = \(\) => \{[\s\S]{0,300}encodeHello\(\)/);
-});
+// Actual hello ordering and sealed sender headers are exercised at the native
+// channel boundary in p2p_completion.test.js, not inferred from source strings.
 
 test("the send page hands the transfer key to the direct path", () => {
   assert.match(read("js/pages/send.js"), /sendViaP2p\(\{[\s\S]*aesKey: key/);
