@@ -20,9 +20,17 @@ function hold(overrides) {
 export function scrubFragment(overrides = {}) {
   const location = overrides.location ?? window.location;
   const history = overrides.history ?? window.history;
-  if (!location.hash) return;
   const clean = new URL(location.href);
+  const hadHash = clean.hash.length > 0;
   clean.hash = "";
+  let removedQuery = false;
+  for (const name of ["aesKey", "a", "api"]) {
+    if (clean.searchParams.has(name)) {
+      clean.searchParams.delete(name);
+      removedQuery = true;
+    }
+  }
+  if (!hadHash && !removedQuery) return;
   history.replaceState(null, "", clean);
 }
 

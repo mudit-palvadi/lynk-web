@@ -68,6 +68,19 @@ test("the link is forgotten once the transfer is done", () => {
   assert.equal(peekStashedLink(env), null);
 });
 
+test("scrubbing removes a key and an api override from the query", () => {
+  const { calls, env } = fakeEnv(
+    "?aesKey=query-key&a=query-token&api=https://ads.example#thekey",
+  );
+
+  scrubFragment(env);
+
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].includes("aesKey"), false);
+  assert.equal(calls[0].includes("api="), false);
+  assert.equal(calls[0].includes("#"), false);
+});
+
 test("scrubbing a page with no fragment does nothing", () => {
   const { calls, env } = fakeEnv("");
 
