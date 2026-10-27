@@ -1,6 +1,6 @@
 import { parseMessage, encodeOffer } from "./signaling.js";
 import { parseText, encodeHeader, encodeEof, encodeDone, encodeHello, encodeReceipt } from "./framer.js";
-import { ChunkCollector } from "./chunk_collector.js";
+import { ChunkCollector, MAX_RECEIVE_BYTES } from "./chunk_collector.js";
 import { ChunkSender } from "./chunk_sender.js";
 import { decryptWithIvPrefix, encryptWithIvPrefix } from "./crypto.js";
 import { P2pCoordinator } from "./p2p_coordinator.js";
@@ -133,7 +133,7 @@ export function isP2pSupported() {
   );
 }
 
-export function receiveViaP2p({ apiBase, transferId, aesKey, accessToken, onStatus, onFileSaved, onComplete, expectedFiles, drainTimeoutMs = 5000 }) {
+export function receiveViaP2p({ apiBase, transferId, aesKey, accessToken, onStatus, onFileSaved, onComplete, expectedFiles, expectedBytes = MAX_RECEIVE_BYTES, drainTimeoutMs = 5000 }) {
   let ws;
   let pc;
   let activeFile = null;
@@ -144,6 +144,7 @@ export function receiveViaP2p({ apiBase, transferId, aesKey, accessToken, onStat
   let deliveredFiles = 0;
   let deliveredBytes = 0;
   let completed = false;
+  let budgetRemaining = expectedBytes > 0 ? expectedBytes : MAX_RECEIVE_BYTES;
 
   const cleanup = () => {
     if (closed) return;
@@ -192,7 +193,7 @@ export function receiveViaP2p({ apiBase, transferId, aesKey, accessToken, onStat
     }
     if (closed) return;
     deliveredFiles++;
-    deliveredBytes += file.size;
+    deliveredBytes += file.collector.receivedBytes;
     activeFile = null;
   };
 
@@ -203,6 +204,10 @@ export function receiveViaP2p({ apiBase, transferId, aesKey, accessToken, onStat
     if (completed) return;
     if (frame.kind === "header") {
       if (activeFile || deliveredFiles >= (expectedFiles ?? 10)) return fail("header");
+      // A missing or zero size used to skip the declared-length check and
+      // accept up to the per-file ceiling. The header has to name a real size
+      // that still fits in what this transfer may hold.
+      if (!(frame.size > 0) || frame.size > budgetRemaining) return fail("header");
       const name = frame.token ? await openName(frame.token, aesKey) : frame.name;
       if (closed) return;
       if (!name) {
@@ -213,7 +218,10 @@ export function receiveViaP2p({ apiBase, transferId, aesKey, accessToken, onStat
         name,
         token: frame.token ?? null,
         size: frame.size,
-        collector: new ChunkCollector({ expectedBytes: frame.size }),
+        collector: new ChunkCollector({
+          expectedBytes: frame.size,
+          limitBytes: Math.min(MAX_RECEIVE_BYTES, budgetRemaining),
+        }),
       };
       onStatus?.("p2p-header", { name, size: frame.size });
     } else if (frame.kind === "eof" && activeFile) {
@@ -221,7 +229,10 @@ export function receiveViaP2p({ apiBase, transferId, aesKey, accessToken, onStat
         ? frame.token === activeFile.token
         : frame.name === activeFile.name;
       if (!matches) return fail("eof");
+      const collected = activeFile.collector.receivedBytes;
+      if (collected !== activeFile.size) return fail("eof");
       await finishActiveFile();
+      budgetRemaining -= collected;
     } else if (frame.kind === "done") {
       if (activeFile || !deliveredFiles || (expectedFiles != null && deliveredFiles !== expectedFiles)) return fail("incomplete");
       completed = true;

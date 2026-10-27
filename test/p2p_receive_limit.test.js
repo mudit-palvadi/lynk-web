@@ -6,6 +6,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { ChunkCollector, MAX_RECEIVE_BYTES } from "../js/core/chunk_collector.js";
+import { receiveViaP2p } from "../js/core/p2p_session.js";
+import { encodeHeader, encodeEof, encodeDone } from "../js/core/framer.js";
+import { barrier, nativeBoundary } from "../test-support/p2p_native.js";
 
 const bytes = (n) => new Uint8Array(n);
 
@@ -49,7 +52,45 @@ test("the receiver builds the collector from the size the peer declared", async 
   const source = readFileSync(join(root, "js/core/p2p_session.js"), "utf8");
 
   assert.ok(
-    source.includes("new ChunkCollector({ expectedBytes: frame.size })"),
+    source.includes("expectedBytes: frame.size"),
     "the receiver does not check the declared size",
   );
+  assert.ok(source.includes("frame.size > budgetRemaining"));
+  assert.ok(source.includes("collected !== activeFile.size"));
+});
+
+test("a header with no positive size is refused", async (t) => {
+  const native = nativeBoundary(t);
+  const failed = barrier();
+  const stop = receiveViaP2p({
+    apiBase: "https://example.invalid",
+    transferId: "test-room",
+    aesKey: "k".repeat(32),
+    onStatus: (event) => { if (String(event).startsWith("p2p-failed")) failed.release(); },
+  });
+  t.after(stop);
+  const channel = await native.openReceiver();
+  channel.onmessage({ data: encodeHeader({ name: "empty.txt", size: 0 }) });
+  await failed.promise;
+});
+
+test("an eof that is short of the declared size is refused", async (t) => {
+  const native = nativeBoundary(t);
+  const failed = barrier();
+  let saved = 0;
+  const stop = receiveViaP2p({
+    apiBase: "https://example.invalid",
+    transferId: "test-room",
+    aesKey: "k".repeat(32),
+    onFileSaved: () => { saved += 1; },
+    onStatus: (event) => { if (String(event).startsWith("p2p-failed")) failed.release(); },
+  });
+  t.after(stop);
+  const channel = await native.openReceiver();
+  channel.onmessage({ data: encodeHeader({ name: "short.txt", size: 4 }) });
+  channel.onmessage({ data: new Uint8Array([1, 2]).buffer });
+  channel.onmessage({ data: encodeEof({ name: "short.txt" }) });
+  channel.onmessage({ data: encodeDone() });
+  await failed.promise;
+  assert.equal(saved, 0);
 });

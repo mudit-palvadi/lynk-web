@@ -262,6 +262,9 @@ function tryP2pReceive() {
           aesKey,
           accessToken,
           expectedFiles,
+          expectedBytes: state.metadata?.total_size > 0
+            ? state.metadata.total_size + 1024
+            : undefined,
           onStatus: (event, info) => {
             if (settled) return;
             if (event === "p2p-connected" || event === "p2p-header" || event === "p2p-progress") {
