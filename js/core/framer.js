@@ -4,10 +4,28 @@ export function encodeHello(version = 2, receipts = false) {
   return JSON.stringify({ t: "hi", v: version, ...(receipts ? { receipts: true } : {}) });
 }
 
-export function encodeReceipt(files, bytes) {
+const DIGEST = /^[0-9a-f]{64}$/;
+
+export async function sha256Hex(parts) {
+  const total = parts.reduce((sum, part) => sum + part.byteLength, 0);
+  const all = new Uint8Array(total);
+  let offset = 0;
+  for (const part of parts) {
+    const bytes = part instanceof Uint8Array ? part : new Uint8Array(part);
+    all.set(bytes, offset);
+    offset += bytes.byteLength;
+  }
+  const digest = await crypto.subtle.digest("SHA-256", all);
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+export function encodeReceipt(files, bytes, sha256) {
   if (!Number.isSafeInteger(files) || files <= 0 || files > 10 ||
       !Number.isSafeInteger(bytes) || bytes <= 0) throw new Error("invalid receipt");
-  return JSON.stringify({ t: "ack", files, bytes });
+  if (sha256 != null && !DIGEST.test(sha256)) throw new Error("invalid receipt");
+  return JSON.stringify(sha256 == null
+    ? { t: "ack", files, bytes }
+    : { t: "ack", files, bytes, sha256 });
 }
 
 export function encodeHeader(meta) {
@@ -46,7 +64,13 @@ export function parseText(raw) {
     case "ack":
       if (!Number.isSafeInteger(json.files) || json.files <= 0 || json.files > 10 ||
           !Number.isSafeInteger(json.bytes) || json.bytes <= 0) return null;
-      return { kind: "receipt", files: json.files, bytes: json.bytes };
+      if (json.sha256 !== undefined && !DIGEST.test(json.sha256)) return null;
+      return {
+        kind: "receipt",
+        files: json.files,
+        bytes: json.bytes,
+        ...(json.sha256 ? { sha256: json.sha256 } : {}),
+      };
     case "hdr":
       if (typeof json.n === "string" && typeof json.size === "number") {
         return { kind: "header", token: json.n, size: json.size };

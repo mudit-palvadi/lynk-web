@@ -1,5 +1,5 @@
 import { parseMessage, encodeOffer } from "./signaling.js";
-import { parseText, encodeHeader, encodeEof, encodeDone, encodeHello, encodeReceipt } from "./framer.js";
+import { parseText, encodeHeader, encodeEof, encodeDone, encodeHello, encodeReceipt, sha256Hex } from "./framer.js";
 import { ChunkCollector, MAX_RECEIVE_BYTES } from "./chunk_collector.js";
 import { ChunkSender } from "./chunk_sender.js";
 import { decryptWithIvPrefix, encryptWithIvPrefix } from "./crypto.js";
@@ -143,6 +143,7 @@ export function receiveViaP2p({ apiBase, transferId, aesKey, accessToken, onStat
   let dataChannel;
   let deliveredFiles = 0;
   let deliveredBytes = 0;
+  const cipherParts = [];
   let completed = false;
   let budgetRemaining = expectedBytes > 0 ? expectedBytes : MAX_RECEIVE_BYTES;
 
@@ -194,6 +195,7 @@ export function receiveViaP2p({ apiBase, transferId, aesKey, accessToken, onStat
     if (closed) return;
     deliveredFiles++;
     deliveredBytes += file.collector.receivedBytes;
+    cipherParts.push(packed);
     activeFile = null;
   };
 
@@ -236,7 +238,11 @@ export function receiveViaP2p({ apiBase, transferId, aesKey, accessToken, onStat
     } else if (frame.kind === "done") {
       if (activeFile || !deliveredFiles || (expectedFiles != null && deliveredFiles !== expectedFiles)) return fail("incomplete");
       completed = true;
-      dataChannel.send(encodeReceipt(deliveredFiles, deliveredBytes));
+      dataChannel.send(encodeReceipt(
+        deliveredFiles,
+        deliveredBytes,
+        await sha256Hex(cipherParts),
+      ));
       const started = performance.now();
       while (!closed && dataChannel.readyState !== "closed" && dataChannel.bufferedAmount > 0) {
         if (performance.now() - started >= drainTimeoutMs) return fail("receipt-drain");
@@ -333,6 +339,7 @@ export function sendViaP2p({ apiBase, sessionId, files, accessToken, aesKey, onS
     let sending = false;
     let channelOpen = false;
     let awaitingReceipt = false;
+    let ciphertextDigest;
     let confirmationTimer;
     let helloTimer;
     const expectedBytes = files.reduce((sum, file) => sum + file.blob.length, 0);
@@ -400,6 +407,7 @@ export function sendViaP2p({ apiBase, sessionId, files, accessToken, aesKey, onS
           channel.send(encodeEof({ name: file.name, token }));
         }
         if (settled) return;
+        ciphertextDigest = await sha256Hex(files.map((file) => file.blob));
         awaitingReceipt = true;
         confirmationTimer = setTimeout(() => fail("confirmation-timeout"), confirmationTimeoutMs);
         channel.send(encodeDone());
@@ -434,7 +442,8 @@ export function sendViaP2p({ apiBase, sessionId, files, accessToken, aesKey, onS
             const frame = parseText(event.data);
             if (frame?.kind === "hello") helloResolve(frame);
             if (!settled && awaitingReceipt && frame?.kind === "receipt" &&
-                frame.files === files.length && frame.bytes === expectedBytes) {
+                frame.files === files.length && frame.bytes === expectedBytes &&
+                frame.sha256 && frame.sha256 === ciphertextDigest) {
               onStatus?.("p2p-delivered");
               finish(true);
             }
