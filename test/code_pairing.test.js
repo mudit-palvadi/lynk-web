@@ -147,6 +147,10 @@ test("a sender mints a code and records the send mode with the key", async () =>
 
 test("the send page shows the code and wraps for the joined receiver", () => {
   assert.ok(sendHtml.includes('id="sender-code"'), "there is no code display");
+  assert.ok(sendHtml.includes('id="sender-key-check"'), "there is no sender key check");
+  assert.ok(html.includes('id="receiver-key-check"'), "there is no receiver key check");
+  assert.ok(sendPage.includes("keyFingerprint"), "the send page never shows a key check");
+  assert.ok(page.includes("keyFingerprint"), "the receive page never shows a key check");
   assert.ok(
     sendPage.includes("createSenderSession"),
     "the send page never mints a code",

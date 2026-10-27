@@ -12,6 +12,7 @@ import {
   generateReceiverKeyPair,
   unwrapDelivery,
 } from "../core/key_wrap.js";
+import { keyFingerprint } from "../core/key_fingerprint.js";
 import { isP2pSupported, receiveViaP2p } from "../core/p2p_session.js";
 import { acquireReceiverOwnership } from "../core/receiver_ownership.js";
 import { HistoryStore } from "../core/history_store.js";
@@ -468,6 +469,10 @@ async function startCodeReceive() {
     const receiver = await generateReceiverKeyPair();
     const session = await api.joinSenderSession(code, receiver.publicKeyB64);
     input.value = "";
+    const checkEl = document.getElementById("receiver-key-check");
+    if (checkEl) {
+      checkEl.textContent = `Key check ${await keyFingerprint(receiver.publicKeyB64)}`;
+    }
     setStatus("Waiting for the sender to share the key…");
 
     let elapsed = 0;

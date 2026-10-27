@@ -7,6 +7,7 @@ import { parseReceiverQrLink } from "../core/link_parser.js";
 import { isP2pSupported, sendViaP2p } from "../core/p2p_session.js";
 import { scanReceiverQr } from "../core/qr_scanner.js";
 import { wrapKey } from "../core/key_wrap.js";
+import { keyFingerprint } from "../core/key_fingerprint.js";
 import { HistoryStore } from "../core/history_store.js";
 
 const els = {
@@ -378,6 +379,10 @@ async function showSenderCode(transferId, key, transferMode) {
         const view = await api.getSenderSession(session.sessionId);
         if (!isCurrent()) return;
         if (!view.receiverPk) return;
+        const checkEl = document.getElementById("sender-key-check");
+        if (checkEl) {
+          checkEl.textContent = `Key check ${await keyFingerprint(view.receiverPk)}`;
+        }
         clearInterval(window.__lynkSenderCodePoll);
         statusEl.textContent = "Receiver joined — handing over the key…";
         const wrapped = await wrapKey({
