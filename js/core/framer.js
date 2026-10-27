@@ -1,7 +1,13 @@
 // Data-channel framing shared with the app receiver. A name travels either in
 // clear (v1) or as a sealed token (v2) when the peer has said it can open one.
-export function encodeHello(version = 2) {
-  return JSON.stringify({ t: "hi", v: version });
+export function encodeHello(version = 2, receipts = false) {
+  return JSON.stringify({ t: "hi", v: version, ...(receipts ? { receipts: true } : {}) });
+}
+
+export function encodeReceipt(files, bytes) {
+  if (!Number.isSafeInteger(files) || files <= 0 || files > 10 ||
+      !Number.isSafeInteger(bytes) || bytes <= 0) throw new Error("invalid receipt");
+  return JSON.stringify({ t: "ack", files, bytes });
 }
 
 export function encodeHeader(meta) {
@@ -35,7 +41,12 @@ export function parseText(raw) {
 
   switch (json.t) {
     case "hi":
-      return { kind: "hello", version: typeof json.v === "number" ? json.v : 1 };
+      return { kind: "hello", version: typeof json.v === "number" ? json.v : 1,
+        ...(json.receipts === true ? { receipts: true } : {}) };
+    case "ack":
+      if (!Number.isSafeInteger(json.files) || json.files <= 0 || json.files > 10 ||
+          !Number.isSafeInteger(json.bytes) || json.bytes <= 0) return null;
+      return { kind: "receipt", files: json.files, bytes: json.bytes };
     case "hdr":
       if (typeof json.n === "string" && typeof json.size === "number") {
         return { kind: "header", token: json.n, size: json.size };
