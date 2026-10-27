@@ -21,19 +21,20 @@ test("splits the access token out of the fragment", () => {
   assert.equal(parsed.accessToken, "access-token");
 });
 
-test("fragment wins over query parameter", () => {
+test("a query key is ignored when the fragment is present", () => {
   const parsed = parseSendLink(
     new URL("https://lynkshare.app/send/id1?aesKey=fromquery#fromfrag"),
   );
   assert.equal(parsed.aesKey, "fromfrag");
 });
 
-test("query param is honored as fallback when fragment missing", () => {
+test("a query key is ignored when the fragment is missing", () => {
   const parsed = parseSendLink(
-    new URL("https://lynkshare.app/send/id2?aesKey=fromquery"),
+    new URL("https://lynkshare.app/send/id2?aesKey=fromquery&a=fromquery"),
   );
   assert.equal(parsed.transferId, "id2");
-  assert.equal(parsed.aesKey, "fromquery");
+  assert.equal(parsed.aesKey, "");
+  assert.equal(parsed.accessToken, "");
 });
 
 test("junk query riding inside the fragment is stripped from the key", () => {
