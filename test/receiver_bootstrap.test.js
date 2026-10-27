@@ -7,8 +7,8 @@ import { parseSendLink } from "../js/core/link_parser.js";
 const root = new URL("../", import.meta.url);
 const html = readFileSync(new URL("app/receive.html", root), "utf8");
 
-// A cached async ad can execute as soon as the parser encounters its tag,
-// before the receiver module and its dependencies have downloaded.
+// The receive page must not hand the key to a third-party script. The
+// bootstrap still takes the fragment out of the address bar for this origin.
 function parseUntilFirstThirdParty(href, storageDenied) {
   const original = href;
   const window = {
@@ -34,12 +34,12 @@ function parseUntilFirstThirdParty(href, storageDenied) {
     if (/\b(?:async|defer)\b|type="module"/.test(attrs)) continue;
     runInNewContext(readFileSync(new URL(src.slice(1), root), "utf8"), { window, URL });
   }
-  assert.equal(sawAd, true, "the static AdSense ownership script must remain present");
+  assert.equal(sawAd, false, "the receive page must not load a third-party script");
   return window;
 }
 
 for (const storageDenied of [false, true]) {
-  test(`the key is scrubbed before a cached ad runs (storage denied: ${storageDenied})`, () => {
+  test(`the key is scrubbed and no third-party script runs (storage denied: ${storageDenied})`, () => {
     const original = "https://lynkshare.app/send/abc#test-key&a=test-token";
     const window = parseUntilFirstThirdParty(original, storageDenied);
     assert.equal(window.location.pathname, "/send/abc");

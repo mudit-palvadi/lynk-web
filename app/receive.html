@@ -39,15 +39,7 @@
   </script>
 
   <meta name="lynk-api-base" content="https://api.lynkshare.app" />
-  <meta name="lynk-adsense-client" content="ca-pub-9472143004063972" />
-  <!--
-    The AdSense loader, exactly as Google's own snippet has it. It has to be
-    in the served HTML: the site-ownership check fetches the page and looks
-    for this script, so a script that is only added by JavaScript cannot be
-    found and the site cannot be verified.
-  -->
   <script src="/js/core/receiver_bootstrap.js"></script>
-  <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-9472143004063972" crossorigin="anonymous"></script>
   <link rel="manifest" href="/manifest.webmanifest" />
   <meta name="theme-color" content="#09090b" />
   <link rel="icon" type="image/png" sizes="192x192" href="/assets/icons/icon-192.png" />
@@ -116,8 +108,6 @@
       </section>
 
       <div id="status" class="status-pill" style="margin-top: 16px;"></div>
-
-      <div data-ad-banner="7640307472" style="margin-top: 28px;"></div>
     </main>
 
     <footer class="footer">
@@ -133,11 +123,5 @@
 
   <script src="/js/lib/qrcode.js"></script>
   <script type="module" src="/js/pages/receive.js"></script>
-  <!--
-    receiver_bootstrap.js scrubs incoming fragments synchronously in the head,
-    before the async AdSense script can execute. Module tag order alone does
-    not protect the link while the receiver's imports are still downloading.
-  -->
-  <script type="module" src="/js/mount_ads.js"></script>
 </body>
 </html>

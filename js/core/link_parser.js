@@ -7,8 +7,10 @@ export function parseSendLink(url) {
   const markerAt = rawFragment.indexOf(marker);
   const fragmentKey = markerAt < 0 ? rawFragment : rawFragment.slice(0, markerAt);
   const fragmentToken = markerAt < 0 ? "" : rawFragment.slice(markerAt + marker.length);
-  const aesKey = fragmentKey !== "" ? fragmentKey : (url.searchParams.get("aesKey") ?? "");
-  const accessToken = fragmentToken !== "" ? fragmentToken : (url.searchParams.get("a") ?? "");
+  // The key and the token live in the fragment only. A query value would be
+  // written to request logs, so it is ignored.
+  const aesKey = fragmentKey;
+  const accessToken = fragmentToken;
 
   return { transferId, aesKey, accessToken };
 }

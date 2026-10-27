@@ -1,7 +1,5 @@
-// The receiver page carries an ad unit, so the transfer key has to be kept
-// away from the ad script. It arrives in the URL fragment; this vault takes
-// it out of the address bar and keeps it in session storage, so that it
-// never travels with an ad request.
+// The transfer key arrives in the URL fragment. The vault takes it out of
+// the address bar and keeps it in memory for this page only.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -32,16 +30,17 @@ function fakeEnv(hash = "#thekey&a=thetoken") {
 }
 
 test("stashing the link takes the fragment out of the address bar", () => {
-  const { calls, env } = fakeEnv();
+  const { calls, store, env } = fakeEnv();
 
   stashLink({ transferId: "abc", aesKey: "thekey", accessToken: "thetoken" }, env);
 
   assert.equal(calls.length, 1);
   assert.ok(!calls[0].includes("#"), `the fragment is still in the url: ${calls[0]}`);
   assert.ok(calls[0].includes("/send/abc"), "the path must survive");
+  assert.equal(store.size, 0, "the key must not be written to storage");
 });
 
-test("the stashed link can be read back for a reload", () => {
+test("the stashed link can be read back on this page", () => {
   const { env } = fakeEnv();
 
   stashLink({ transferId: "abc", aesKey: "thekey", accessToken: "thetoken" }, env);
@@ -54,7 +53,8 @@ test("the stashed link can be read back for a reload", () => {
 
 test("a stashed link without a key is not returned", () => {
   const { env } = fakeEnv();
-  env.storage.setItem("lynkshare.receiver-link", JSON.stringify({ transferId: "abc", aesKey: "" }));
+
+  stashLink({ transferId: "abc", aesKey: "", accessToken: "thetoken" }, env);
 
   assert.equal(peekStashedLink(env), null);
 });
@@ -76,7 +76,7 @@ test("scrubbing a page with no fragment does nothing", () => {
   assert.equal(calls.length, 0);
 });
 
-test("storage that refuses to work does not break the page", () => {
+test("a storage failure still keeps the key in memory", () => {
   const { calls, env } = fakeEnv();
   env.storage.setItem = () => {
     throw new Error("storage is full");
@@ -84,9 +84,8 @@ test("storage that refuses to work does not break the page", () => {
 
   stashLink({ transferId: "abc", aesKey: "thekey", accessToken: "thetoken" }, env);
 
-  // The fragment is still removed, and the page carries on.
   assert.equal(calls.length, 1);
-  assert.equal(peekStashedLink(env), null);
+  assert.equal(peekStashedLink(env).aesKey, "thekey");
 });
 
 test("a denied storage getter cannot prevent fragment removal or break cleanup", () => {
@@ -98,6 +97,7 @@ test("a denied storage getter cannot prevent fragment removal or break cleanup",
   assert.doesNotThrow(() => scrubFragment(env));
   assert.doesNotThrow(() => stashLink({ transferId: "abc", aesKey: "thekey" }, env));
   assert.equal(calls.length, 2);
-  assert.equal(peekStashedLink(env), null);
+  assert.equal(peekStashedLink(env).aesKey, "thekey");
   assert.doesNotThrow(() => clearStashedLink(env));
+  assert.equal(peekStashedLink(env), null);
 });

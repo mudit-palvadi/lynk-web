@@ -1,17 +1,19 @@
 // Keeps the transfer key out of the address bar.
 //
-// receiver_bootstrap.js removes an incoming fragment before third-party
-// scripts run. This module also scrubs links adopted later and keeps them in
-// per-tab session storage for reloads. Storage is not sent automatically to
-// the server, but it remains readable by scripts running on this origin.
+// The key stays in this page's memory. It is not written to sessionStorage,
+// so another script on the origin cannot read it back after this page is
+// gone. A reload needs the link again.
 //
 // The browser objects can be passed in, so the behaviour can be tested
 // without a DOM.
-const STORAGE_KEY = "lynkshare.receiver-link";
+const pageHold = { current: null };
 
-function storage(overrides = {}) {
-  // Even reading sessionStorage can throw when browser policy denies it.
-  return overrides.storage ?? window.sessionStorage;
+function hold(overrides) {
+  if (overrides) {
+    if (!overrides.hold) overrides.hold = { current: null };
+    return overrides.hold;
+  }
+  return pageHold;
 }
 
 /** Removes the fragment from the address bar without reloading the page. */
@@ -25,43 +27,28 @@ export function scrubFragment(overrides = {}) {
 }
 
 /**
- * Keeps the key for a reload and takes it out of the address bar.
+ * Keeps the key for this page and takes it out of the address bar.
  *
- * Session storage is per tab and per origin, not part of an HTTP request.
- * It is readable by other scripts on this page,
- * which is why the key is also kept out of the DOM.
+ * Nothing is written to storage. The key lives only until the page is left.
  */
 export function stashLink({ transferId, aesKey, accessToken }, overrides) {
-  try {
-    storage(overrides).setItem(
-      STORAGE_KEY,
-      JSON.stringify({ transferId, aesKey, accessToken }),
-    );
-  } catch {
-    // Storage is unavailable (private mode, or it is full). The key then
-    // lives in memory only, and a reload needs the link again.
+  const slot = hold(overrides);
+  if (typeof aesKey === "string" && aesKey) {
+    slot.current = { transferId, aesKey, accessToken: accessToken ?? "" };
+  } else {
+    slot.current = null;
   }
   scrubFragment(overrides);
 }
 
-/** The link stashed by the last page load, if there was one. */
+/** The link kept for this page, if there is one. */
 export function peekStashedLink(overrides) {
-  try {
-    const raw = storage(overrides).getItem(STORAGE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed.aesKey !== "string" || !parsed.aesKey) return null;
-    return parsed;
-  } catch {
-    return null;
-  }
+  const current = hold(overrides).current;
+  if (!current || typeof current.aesKey !== "string" || !current.aesKey) return null;
+  return current;
 }
 
 /** Forgets the stashed link, once the transfer is done with. */
 export function clearStashedLink(overrides) {
-  try {
-    storage(overrides).removeItem(STORAGE_KEY);
-  } catch {
-    // Nothing to clear.
-  }
+  hold(overrides).current = null;
 }
