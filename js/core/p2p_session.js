@@ -313,7 +313,7 @@ export function receiveViaP2p({ apiBase, transferId, aesKey, accessToken, onStat
   return cleanup;
 }
 
-export function sendViaP2p({ apiBase, sessionId, files, accessToken, aesKey, onStatus }) {
+export function sendViaP2p({ apiBase, sessionId, files, accessToken, aesKey, onStatus, helloTimeoutMs = 2000, confirmationTimeoutMs = 30000 }) {
   return new Promise((resolve) => {
     let ws;
     let pc;
@@ -321,7 +321,10 @@ export function sendViaP2p({ apiBase, sessionId, files, accessToken, aesKey, onS
     let settled = false;
     let sending = false;
     let channelOpen = false;
-    let framesSent = false;
+    let awaitingReceipt = false;
+    let confirmationTimer;
+    let helloTimer;
+    const expectedBytes = files.reduce((sum, file) => sum + file.blob.length, 0);
     let helloResolve;
     const helloSeen = new Promise((resolve) => {
       helloResolve = resolve;
@@ -332,6 +335,9 @@ export function sendViaP2p({ apiBase, sessionId, files, accessToken, aesKey, onS
     const finish = (delivered) => {
       if (settled) return;
       settled = true;
+      clearTimeout(helloTimer);
+      clearTimeout(confirmationTimer);
+      coordinator?.dispose();
       try {
         channel?.close();
       } catch {}
@@ -345,15 +351,7 @@ export function sendViaP2p({ apiBase, sessionId, files, accessToken, aesKey, onS
     };
 
     const fail = (reason) => {
-      // Once the file frames are on the wire the receiver has the file, so a
-      // late failure must not turn a delivered transfer into a cloud
-      // fallback. The signaling socket and the closing "done" frame are only
-      // needed for the handshake.
-      if (framesSent) {
-        onStatus?.("p2p-delivered");
-        finish(true);
-        return;
-      }
+      if (settled) return;
       onStatus?.(`p2p-failed:${reason}`);
       finish(false);
     };
@@ -362,17 +360,21 @@ export function sendViaP2p({ apiBase, sessionId, files, accessToken, aesKey, onS
       if (sending) return;
       sending = true;
       try {
-        // A peer that never says hello only understands the clear-text header;
-        // it gets two seconds, then the transfer goes ahead the old way.
-        const peerOpensNames = await Promise.race([
+        // Older receivers cannot prove completion. Fall back before streaming
+        // any file rather than repeating the old queued-bytes success claim.
+        const hello = await Promise.race([
           helloSeen,
-          new Promise((resolve) => setTimeout(() => resolve(false), 2000)),
+          new Promise((resolve) => { helloTimer = setTimeout(() => resolve(null), helloTimeoutMs); }),
         ]);
-        const seal = peerOpensNames && aesKey ? (name) => sealName(name, aesKey) : () => null;
+        clearTimeout(helloTimer);
+        if (settled) return;
+        if (!hello?.receipts || !files.length || files.length > 10) return fail("confirmation-unsupported");
+        const seal = hello.version >= 2 && aesKey ? (name) => sealName(name, aesKey) : () => null;
 
         const sender = new ChunkSender({
-          bufferedAmount: () => channel.bufferedAmount,
+          bufferedAmount: () => settled ? 0 : channel.bufferedAmount,
           send: async (chunk) => {
+            if (settled) throw new Error("send stopped");
             channel.send(chunk);
             await new Promise((r) => setTimeout(r, 0));
           },
@@ -380,21 +382,17 @@ export function sendViaP2p({ apiBase, sessionId, files, accessToken, aesKey, onS
 
         for (const file of files) {
           const token = await seal(file.name);
+          if (settled) return;
           onStatus?.("p2p-sending", { name: file.name });
           channel.send(encodeHeader({ name: file.name, size: file.blob.length, token }));
           await sender.sendAll(file.blob);
           channel.send(encodeEof({ name: file.name, token }));
         }
-        // The files are on the wire, so the receiver has them.
-        framesSent = true;
-        // The "done" frame only tells the receiver that nothing more is
-        // coming. If it cannot be sent the transfer is still delivered, so it
-        // must not fail the whole thing.
-        try {
-          channel.send(encodeDone());
-        } catch {}
-        onStatus?.("p2p-delivered");
-        finish(true);
+        if (settled) return;
+        awaitingReceipt = true;
+        confirmationTimer = setTimeout(() => fail("confirmation-timeout"), confirmationTimeoutMs);
+        channel.send(encodeDone());
+        onStatus?.("p2p-confirming");
       } catch {
         fail("channel");
       }
@@ -418,12 +416,17 @@ export function sendViaP2p({ apiBase, sessionId, files, accessToken, aesKey, onS
             if (!settled) fail("channel");
           };
           channel.onclose = () => {
-            if (!settled && !sending) fail("closed");
+            if (!settled) fail("closed");
           };
           channel.onmessage = (event) => {
             if (typeof event.data !== "string") return;
             const frame = parseText(event.data);
-            if (frame && frame.kind === "hello") helloResolve(true);
+            if (frame?.kind === "hello") helloResolve(frame);
+            if (!settled && awaitingReceipt && frame?.kind === "receipt" &&
+                frame.files === files.length && frame.bytes === expectedBytes) {
+              onStatus?.("p2p-delivered");
+              finish(true);
+            }
           };
           pc.onicecandidate = (event) => {
             if (!event.candidate) return;

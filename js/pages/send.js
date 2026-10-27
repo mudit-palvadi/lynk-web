@@ -305,6 +305,9 @@ async function sendP2P() {
             "success",
           );
         }
+        if (event === "p2p-confirming") {
+          setResultStatus("Waiting for the receiver to confirm all files...", "warn");
+        }
         if (event === "p2p-delivered") {
           setResultStatus(
             "Delivered directly - the receiver has all the files.",

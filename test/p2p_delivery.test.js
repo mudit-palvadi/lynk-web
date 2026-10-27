@@ -58,26 +58,9 @@ test("the handshake budget is long enough for a phone that is cold starting", ()
   );
 });
 
-test("a delivered file is never turned back into a cloud fallback", () => {
-  const session = read("js/core/p2p_session.js");
-
-  assert.ok(
-    session.includes("framesSent"),
-    "the session does not remember that the frames were sent",
-  );
-  assert.ok(
-    session.includes('onStatus?.("p2p-connected")'),
-    "the connected state is never reported",
-  );
-  assert.ok(
-    session.includes("!channelOpen"),
-    "a signaling error after the channel opened still fails the transfer",
-  );
-  assert.ok(
-    session.includes("timeoutMs: 30000"),
-    "the sender still gives the handshake only eight seconds",
-  );
-});
+// Actual receiver-confirmed completion, close/error and timeout behavior is
+// exercised through native-boundary fakes in p2p_completion.test.js. Merely
+// finding a "framesSent" flag in the source used to lock in false success.
 
 test("the page tells the user what is happening", () => {
   const page = read("js/pages/send.js");
