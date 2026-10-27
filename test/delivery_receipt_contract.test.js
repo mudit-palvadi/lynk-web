@@ -11,7 +11,14 @@ for (const vector of JSON.parse(fixture)) test(`receipt contract: ${vector.wire}
   const frame = parseText(vector.wire);
   assert.equal(frame?.kind ?? null, vector.kind);
   if (vector.kind === "hello") assert.equal(frame.receipts === true, vector.receipts);
-  if (vector.kind === "receipt") assert.equal(encodeReceipt(frame.files, frame.bytes), '{"t":"ack","files":2,"bytes":64}');
+  if (vector.kind === "receipt") {
+    assert.equal(frame.sha256 ?? null, vector.sha256 ?? null);
+    if (vector.sha256) {
+      assert.equal(encodeReceipt(frame.files, frame.bytes, frame.sha256), vector.wire);
+    } else {
+      assert.equal(encodeReceipt(frame.files, frame.bytes), '{"t":"ack","files":2,"bytes":64}');
+    }
+  }
 });
 test("receipt negotiation is opt-in without changing legacy hello bytes", () => {
   assert.equal(encodeHello(), '{"t":"hi","v":2}');

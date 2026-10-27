@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { receiveViaP2p } from "../js/core/p2p_session.js";
 import { encryptWithIvPrefix } from "../js/core/crypto.js";
-import { encodeHeader, encodeEof, encodeDone, encodeReceipt } from "../js/core/framer.js";
+import { encodeHeader, encodeEof, encodeDone, encodeReceipt, sha256Hex } from "../js/core/framer.js";
 import { KEY, flush, until, barrier, nativeBoundary } from "../test-support/p2p_native.js";
 
 test("receiver acknowledges only after done and asynchronous delivery of every file", async (t) => {
@@ -32,7 +32,10 @@ test("receiver acknowledges only after done and asynchronous delivery of every f
   gate.release();
   await completed.promise;
   assert.deepEqual(saved, [["one.txt", [7, 8, 9]], ["two.txt", [7, 8, 9]]]);
-  assert.equal(channel.sent.at(-1), encodeReceipt(2, packed.length * 2));
+  assert.equal(
+    channel.sent.at(-1),
+    encodeReceipt(2, packed.length * 2, await sha256Hex([packed, packed])),
+  );
 });
 
 test("decryption failure never produces a receipt", async (t) => {
