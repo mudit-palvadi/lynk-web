@@ -155,6 +155,7 @@ export class LynkApi {
       sessionId: json.session_id,
       code: json.code,
       expiresIn: json.expires_in ?? 0,
+      senderSecret: json.sender_secret,
     };
   }
 
@@ -170,12 +171,15 @@ export class LynkApi {
     };
   }
 
-  async attachSenderKey(sessionId, transferId, wrappedKey, mode) {
+  async attachSenderKey(sessionId, transferId, wrappedKey, mode, senderSecret) {
     return this.request(
       `${this.baseUrl}/api/v1/sender-sessions/${encodeURIComponent(sessionId)}/attach`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...capabilityHeaders("X-Lynk-Sender-Secret", senderSecret),
+        },
         body: JSON.stringify({
           transfer_id: transferId,
           wrapped_key: wrappedKey,
