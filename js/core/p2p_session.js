@@ -139,6 +139,7 @@ export function receiveViaP2p({ apiBase, transferId, aesKey, accessToken, onStat
   let activeFile = null;
   let closed = false;
   let coordinator;
+  let incoming = Promise.resolve();
 
   const cleanup = () => {
     if (closed) return;
@@ -176,11 +177,13 @@ export function receiveViaP2p({ apiBase, transferId, aesKey, accessToken, onStat
 
   const finishActiveFile = async () => {
     if (!activeFile) return;
-    const packed = await activeFile.collector.close();
+    const file = activeFile;
+    const packed = await file.collector.close();
     if (closed) return;
     const plaintext = await decryptWithIvPrefix(packed, aesKey);
     if (closed) return;
-    onFileSaved?.(plaintext, activeFile.name);
+    await onFileSaved?.(plaintext, file.name);
+    if (closed) return;
     activeFile = null;
   };
 
@@ -234,11 +237,11 @@ export function receiveViaP2p({ apiBase, transferId, aesKey, accessToken, onStat
             onStatus?.("p2p-connected");
           };
           channel.onmessage = (evt) => {
-            if (typeof evt.data === "string") {
-              handleTextFrame(evt.data);
-            } else {
-              handleBinaryChunk(evt.data);
-            }
+            // Ordered RTC messages still need an application queue: opening a
+            // sealed header and decrypting/saving a file both await WebCrypto.
+            incoming = incoming.then(() => typeof evt.data === "string"
+              ? handleTextFrame(evt.data) : handleBinaryChunk(evt.data))
+              .catch(() => fail("receive"));
           };
         };
         pc.onicecandidate = (event) => {
