@@ -35,6 +35,7 @@ test("joining a code sends the digits and the receiver's public key", async () =
         session_id: "s1",
         status: "joined",
         expires_in: 600,
+        receiver_secret: "receiver-secret",
       }),
     },
   ]);
@@ -44,6 +45,7 @@ test("joining a code sends the digits and the receiver's public key", async () =
 
   assert.equal(session.sessionId, "s1");
   assert.equal(session.expiresIn, 600);
+  assert.equal(session.receiverSecret, "receiver-secret");
   assert.equal(calls[0].url, "http://b/api/v1/sender-sessions/join");
   assert.equal(calls[0].options.method, "POST");
   assert.deepEqual(JSON.parse(calls[0].options.body), {
@@ -53,7 +55,7 @@ test("joining a code sends the digits and the receiver's public key", async () =
 });
 
 test("a key response carries the transfer, the wrap and the send mode", async () => {
-  const { fetch } = mockFetch([
+  const { fetch, calls } = mockFetch([
     {
       body: JSON.stringify({
         transfer_id: "t7",
@@ -65,9 +67,10 @@ test("a key response carries the transfer, the wrap and the send mode", async ()
   ]);
   const api = new LynkApi({ baseUrl: "http://b", fetch });
 
-  const key = await api.getSenderSessionKey("s1");
+  const key = await api.getSenderSessionKey("s1", "receiver-secret");
 
   assert.deepEqual(key, { transferId: "t7", wrappedKey: "wrapped", mode: "p2p" });
+  assert.equal(calls[0].options.headers["X-Lynk-Receiver-Secret"], "receiver-secret");
 });
 
 test("409 while the sender has not attached means keep waiting", async () => {
@@ -89,6 +92,10 @@ test("the page wires the code box to the pairing endpoints", () => {
   assert.ok(
     page.includes("getSenderSessionKey"),
     "the page never collects the wrapped key",
+  );
+  assert.ok(
+    page.includes("session.receiverSecret"),
+    "the page never sends the receiver secret",
   );
   assert.ok(
     page.includes("unwrapDelivery"),

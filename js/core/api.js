@@ -124,6 +124,7 @@ export class LynkApi {
       sessionId: json.session_id,
       status: json.status,
       expiresIn: json.expires_in ?? 0,
+      receiverSecret: json.receiver_secret ?? "",
     };
   }
 
@@ -131,10 +132,11 @@ export class LynkApi {
    * The sender's wrapped key, or null while the sender has not attached it.
    * A 409 is the normal "not yet" answer, not a failure.
    */
-  async getSenderSessionKey(sessionId) {
+  async getSenderSessionKey(sessionId, receiverSecret = "") {
     try {
       const json = await this.request(
         `${this.baseUrl}/api/v1/sender-sessions/${encodeURIComponent(sessionId)}/key`,
+        { headers: capabilityHeaders("X-Lynk-Receiver-Secret", receiverSecret) },
       );
       return {
         transferId: json.transfer_id,
