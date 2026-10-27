@@ -392,6 +392,7 @@ async function showSenderCode(transferId, key, transferMode) {
           transferId,
           wrapped,
           transferMode,
+          session.senderSecret,
         );
         if (!isCurrent()) return;
         statusEl.textContent = "Receiver joined — files unlocked.";

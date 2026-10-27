@@ -112,6 +112,7 @@ test("a sender mints a code and records the send mode with the key", async () =>
         code: "654321",
         status: "waiting",
         expires_in: 600,
+        sender_secret: "sender-secret",
       }),
     },
     {
@@ -128,10 +129,15 @@ test("a sender mints a code and records the send mode with the key", async () =>
 
   const session = await api.createSenderSession();
   const view = await api.getSenderSession(session.sessionId);
-  await api.attachSenderKey("s2", "t7", "wrapped", "p2p");
+  await api.attachSenderKey("s2", "t7", "wrapped", "p2p", session.senderSecret);
 
   assert.equal(session.code, "654321");
+  assert.equal(session.senderSecret, "sender-secret");
   assert.equal(view.receiverPk, "pk-2");
+  assert.equal(
+    calls[2].options.headers["X-Lynk-Sender-Secret"],
+    "sender-secret",
+  );
   assert.deepEqual(JSON.parse(calls[2].options.body), {
     transfer_id: "t7",
     wrapped_key: "wrapped",
@@ -148,6 +154,10 @@ test("the send page shows the code and wraps for the joined receiver", () => {
   assert.ok(
     sendPage.includes("attachSenderKey"),
     "the send page never hands over the wrapped key",
+  );
+  assert.ok(
+    sendPage.includes("session.senderSecret"),
+    "the send page never sends the code secret",
   );
   assert.ok(
     sendPage.includes('"p2p"'),
