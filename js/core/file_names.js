@@ -37,7 +37,8 @@ export function safeFileName(raw) {
   const lastSeparator = normalized.lastIndexOf("/");
   const base = lastSeparator >= 0 ? normalized.slice(lastSeparator + 1) : normalized;
 
-  const cleaned = base.replace(CONTROL_CHARACTERS, "");
+  // A colon is an alternate data stream on Windows, so it is not part of the name.
+  const cleaned = base.replace(CONTROL_CHARACTERS, "").replaceAll(":", "");
 
   if (cleaned.trim() === "" || ONLY_DOTS.test(cleaned)) {
     return "file";

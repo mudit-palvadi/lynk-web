@@ -42,6 +42,7 @@ test("control characters are removed", () => {
   assert.equal(safeFileName(`with${NUL}null.txt`), "withnull.txt");
   assert.equal(safeFileName("with\nnewline.txt"), "withnewline.txt");
   assert.equal(safeFileName("with\ttab.txt"), "withtab.txt");
+  assert.equal(safeFileName("report.txt:stream"), "report.txtstream");
 });
 
 test("the result is always a single safe segment", () => {
