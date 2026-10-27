@@ -488,7 +488,10 @@ async function startCodeReceive() {
         return;
       }
       try {
-        const key = await api.getSenderSessionKey(session.sessionId);
+        const key = await api.getSenderSessionKey(
+          session.sessionId,
+          session.receiverSecret,
+        );
         if (!key) return;
         clearInterval(window.__lynkCodePoll);
         const delivery = await unwrapDelivery({
