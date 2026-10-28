@@ -38,9 +38,14 @@ export function safeFileName(raw) {
   const base = lastSeparator >= 0 ? normalized.slice(lastSeparator + 1) : normalized;
 
   // A colon is an alternate data stream on Windows, so it is not part of the name.
-  const cleaned = base.replace(CONTROL_CHARACTERS, "").replaceAll(":", "");
+  // Windows drops trailing spaces and dots, so ".. " would become ".." on disk.
+  const cleaned = base
+    .replace(CONTROL_CHARACTERS, "")
+    .replaceAll(":", "")
+    .trim()
+    .replace(/[. ]+$/g, "");
 
-  if (cleaned.trim() === "" || ONLY_DOTS.test(cleaned)) {
+  if (cleaned === "" || ONLY_DOTS.test(cleaned)) {
     return "file";
   }
 
