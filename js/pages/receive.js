@@ -2,6 +2,7 @@ import { parseSendLink, parseReceiverQrLink } from "../core/link_parser.js";
 import {
   clearStashedLink,
   peekStashedLink,
+  scrubFragment,
   stashLink,
 } from "../core/link_vault.js";
 import { safeFileName } from "../core/file_names.js";
@@ -552,6 +553,7 @@ if (direct.transferId && direct.aesKey) {
   state.accessToken = stashed.accessToken ?? "";
   loadTransfer();
 } else if (direct.transferId && !direct.aesKey) {
+  scrubFragment();
   setStatus("This link is missing its decryption key (#fragment). Use the original QR link.", "error");
 }
 
