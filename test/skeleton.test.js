@@ -13,7 +13,9 @@ test("landing page references the shared stylesheet", () => {
 
 test("receiver page loads the receive controller module", () => {
   const html = readFileSync(join(webRoot, "app/receive.html"), "utf8");
-  assert.match(html, /\/js\/pages\/receive\.js/);
+  const starter = readFileSync(join(webRoot, "js/core/receiver_start.js"), "utf8");
+  assert.match(html, /\/js\/core\/receiver_start\.js/);
+  assert.match(starter, /\/js\/pages\/receive\.js/);
 });
 
 test("dev server rewrites /send/{id} to the receiver page", async () => {

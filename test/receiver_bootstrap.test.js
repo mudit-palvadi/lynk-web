@@ -11,6 +11,7 @@ const html = readFileSync(new URL("app/receive.html", root), "utf8");
 // bootstrap still takes the fragment out of the address bar for this origin.
 function parseUntilFirstThirdParty(href, storageDenied) {
   const original = href;
+  let startedWith;
   const window = {
     location: new URL(href),
     history: {
@@ -20,6 +21,8 @@ function parseUntilFirstThirdParty(href, storageDenied) {
       if (storageDenied) throw new Error("Storage access denied");
       return { setItem() {} };
     },
+    __lynkLoadReceivePage(link) { startedWith = link; },
+    __lynkStartedWith() { return startedWith; },
   };
   let sawAd = false;
   for (const [, attrs] of html.matchAll(/<script\b([^>]*)>[\s\S]*?<\/script>/gi)) {
@@ -43,8 +46,16 @@ for (const storageDenied of [false, true]) {
     const original = "https://lynkshare.app/send/abc#test-key&a=test-token";
     const window = parseUntilFirstThirdParty(original, storageDenied);
     assert.equal(window.location.pathname, "/send/abc");
-    assert.equal(window.__lynkTakeInitialLink(), original, "the receiver still needs the original link");
+    assert.equal(window.__lynkStartedWith(), original, "the receiver still needs the original link");
     assert.equal(window.__lynkTakeInitialLink, undefined, "the link handoff is consumed once");
+    const bootstrapAt = html.indexOf('src="/js/core/receiver_bootstrap.js"');
+    const startAt = html.indexOf('src="/js/core/receiver_start.js"');
+    const afterBootstrap = html.indexOf("</script>", bootstrapAt) + "</script>".length;
+    const beforeStart = html.lastIndexOf("<script", startAt);
+    assert.ok(beforeStart > afterBootstrap);
+    assert.equal(html.slice(afterBootstrap, beforeStart).includes("<script"), false);
+    assert.equal(html.includes('src="/js/lib/qrcode.js"'), false);
+    assert.equal(html.includes('type="module" src="/js/pages/receive.js"'), false);
   });
 }
 
@@ -52,10 +63,10 @@ test("the receiver startup adopts the original link after the bootstrap scrubs i
   const original = "https://lynkshare.app/send/abc#test-key&a=test-token";
   const window = parseUntilFirstThirdParty(original, true);
   const page = readFileSync(new URL("js/pages/receive.js", root), "utf8");
-  const startup = page.slice(page.indexOf("const initialLink ="), page.indexOf("async function startPairing"));
-  assert.ok(startup, "receiver startup must consume the bootstrap handoff");
+  const startup = page.slice(page.indexOf("function start(initialLink)"), page.indexOf("export { start }"));
+  assert.ok(startup.includes("adoptLink"), "receiver startup must consume the handed link");
   let adopted;
-  runInNewContext(startup, {
+  runInNewContext(`${startup}\nstart(${JSON.stringify(original)});`, {
     window, URL, parseSendLink,
     peekStashedLink: () => { throw new Error("the first load must not need storage"); },
     adoptLink: (url) => { adopted = url; },
@@ -70,9 +81,9 @@ test("a link with no fragment key still scrubs query credentials", () => {
     location: new URL("https://lynkshare.app/send/abc?aesKey=query-key&a=query-token"),
   };
   const page = readFileSync(new URL("js/pages/receive.js", root), "utf8");
-  const startup = page.slice(page.indexOf("const initialLink ="), page.indexOf("async function startPairing"));
+  const startup = page.slice(page.indexOf("function start(initialLink)"), page.indexOf("export { start }"));
   let scrubbed = false;
-  runInNewContext(startup, {
+  runInNewContext(`${startup}\nstart(${JSON.stringify(window.location.href)});`, {
     window,
     URL,
     parseSendLink,

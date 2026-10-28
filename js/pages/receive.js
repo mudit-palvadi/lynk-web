@@ -539,22 +539,36 @@ document.getElementById("code-input").addEventListener("keydown", (event) => {
   if (event.key === "Enter") startCodeReceive();
 });
 
-const initialLink = window.__lynkTakeInitialLink?.() ?? window.location.href;
-const direct = parseSendLink(new URL(initialLink));
-const stashed = direct.transferId && !direct.aesKey ? peekStashedLink() : null;
-if (direct.transferId && direct.aesKey) {
-  // The head bootstrap has already scrubbed the address bar. adoptLink also
-  // scrubs links adopted later and keeps the parsed key for this transfer.
-  adoptLink(new URL(initialLink));
-} else if (stashed && stashed.transferId === direct.transferId) {
-  // A reload: the fragment is gone, but the key is still in this tab.
-  state.transferId = stashed.transferId;
-  state.aesKey = stashed.aesKey;
-  state.accessToken = stashed.accessToken ?? "";
-  loadTransfer();
-} else if (direct.transferId && !direct.aesKey) {
-  scrubFragment();
-  setStatus("This link is missing its decryption key (#fragment). Use the original QR link.", "error");
+function start(initialLink) {
+  const direct = parseSendLink(new URL(initialLink));
+  const stashed = direct.transferId && !direct.aesKey ? peekStashedLink() : null;
+  if (direct.transferId && direct.aesKey) {
+    // The head bootstrap has already scrubbed the address bar. adoptLink also
+    // scrubs links adopted later and keeps the parsed key for this transfer.
+    adoptLink(new URL(initialLink));
+  } else if (stashed && stashed.transferId === direct.transferId) {
+    // A reload: the fragment is gone, but the key is still in this tab.
+    state.transferId = stashed.transferId;
+    state.aesKey = stashed.aesKey;
+    state.accessToken = stashed.accessToken ?? "";
+    loadTransfer();
+  } else if (direct.transferId && !direct.aesKey) {
+    scrubFragment();
+    setStatus("This link is missing its decryption key (#fragment). Use the original QR link.", "error");
+  }
+}
+
+export { start };
+
+function loadQrcode() {
+  if (typeof window.qrcode === "function") return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = "/js/lib/qrcode.js";
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error("qr"));
+    document.head.appendChild(script);
+  });
 }
 
 async function startPairing() {
@@ -565,6 +579,7 @@ async function startPairing() {
 
   try {
     if (typeof crypto.subtle === "undefined") throw new Error("no webcrypto");
+    await loadQrcode();
     await crypto.subtle.generateKey({ name: "X25519" }, true, ["deriveBits"]);
 
     const api = new LynkApi({ baseUrl: resolveApiBase() });
