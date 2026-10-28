@@ -31,6 +31,9 @@ test("an absolute posix path keeps only the last segment", () => {
 
 test("a name that is not a file falls back", () => {
   assert.equal(safeFileName(".."), "file");
+  assert.equal(safeFileName(".. "), "file");
+  assert.equal(safeFileName("... "), "file");
+  assert.equal(safeFileName(". "), "file");
   assert.equal(safeFileName("."), "file");
   assert.equal(safeFileName(""), "file");
   assert.equal(safeFileName("   "), "file");
