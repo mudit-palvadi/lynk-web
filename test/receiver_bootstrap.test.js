@@ -65,7 +65,34 @@ test("the receiver startup adopts the original link after the bootstrap scrubs i
   assert.equal(window.__lynkTakeInitialLink, undefined);
 });
 
-test("code-first visits and query strings are left intact without a fragment", () => {
+test("a link with no fragment key still scrubs query credentials", () => {
+  const window = {
+    location: new URL("https://lynkshare.app/send/abc?aesKey=query-key&a=query-token"),
+  };
+  const page = readFileSync(new URL("js/pages/receive.js", root), "utf8");
+  const startup = page.slice(page.indexOf("const initialLink ="), page.indexOf("async function startPairing"));
+  let scrubbed = false;
+  runInNewContext(startup, {
+    window,
+    URL,
+    parseSendLink,
+    peekStashedLink: () => null,
+    adoptLink() { throw new Error("a keyless link is not adopted"); },
+    scrubFragment() { scrubbed = true; },
+    setStatus() {},
+  });
+  assert.equal(scrubbed, true);
+});
+
+test("a query-only key is removed from the address bar", () => {
+  const original = "https://lynkshare.app/send/abc?aesKey=query-key&a=query-token&api=https://ads.example&keep=1";
+  const window = parseUntilFirstThirdParty(original, true);
+  assert.equal(window.location.hash, "");
+  assert.equal(window.location.search, "?keep=1");
+  assert.equal(window.__lynkTakeInitialLink, undefined);
+});
+
+test("code-first visits and ordinary query strings are left intact without a fragment", () => {
   const original = "https://lynkshare.app/app/receive?example=1";
   const window = parseUntilFirstThirdParty(original, true);
   assert.equal(window.location.href, original);
