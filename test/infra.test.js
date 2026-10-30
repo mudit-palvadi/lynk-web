@@ -6,6 +6,12 @@ import { dirname, join } from "node:path";
 
 const webRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 
+test("app-ads.txt publishes the AdMob seller record separately from ads.txt", () => {
+  const seller = "google.com, pub-9472143004063972, DIRECT, f08c47fec0942fa0\n";
+  assert.equal(readFileSync(join(webRoot, "app-ads.txt"), "utf8"), seller);
+  assert.equal(readFileSync(join(webRoot, "ads.txt"), "utf8"), seller);
+});
+
 test("assetlinks.json binds only the upload and Play signing certificates", () => {
   const parsed = JSON.parse(
     readFileSync(join(webRoot, ".well-known/assetlinks.json"), "utf8"),
